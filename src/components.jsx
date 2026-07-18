@@ -1,15 +1,4 @@
-import {
-  Search,
-  ShieldCheck,
-  Bed,
-  Bath,
-  Ruler,
-  BadgeCheck,
-  MapPin,
-  MessageCircle,
-  Home,
-  Phone,
-} from "lucide-react";
+import { Search, ShieldCheck, Bed, Bath, Ruler, BadgeCheck, MapPin, MessageCircle, Chrome as Home, Phone } from "lucide-react";
 import { properties } from "./data.js";
 
 function cn(...classes) {
