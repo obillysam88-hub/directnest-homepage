@@ -9,6 +9,7 @@ export const properties = [
     area: "420 sqm",
     image: "/properties/lekki-duplex.png",
     verified: true,
+    whatsapp: "+2348011111111",
   },
   {
     id: "2",
@@ -20,6 +21,7 @@ export const properties = [
     area: "180 sqm",
     image: "/properties/ikeja-apartment.png",
     verified: true,
+    whatsapp: "+2348022222222",
   },
   {
     id: "3",
@@ -31,6 +33,7 @@ export const properties = [
     area: "300 sqm",
     image: "/properties/ajah-bungalow.png",
     verified: true,
+    whatsapp: "+2348033333333",
   },
   {
     id: "4",
@@ -42,6 +45,7 @@ export const properties = [
     area: "520 sqm",
     image: "/properties/vi-penthouse.png",
     verified: true,
+    whatsapp: "+2348044444444",
   },
   {
     id: "5",
@@ -53,6 +57,7 @@ export const properties = [
     area: "65 sqm",
     image: "/properties/yaba-flat.png",
     verified: true,
+    whatsapp: "+2348055555555",
   },
   {
     id: "6",
@@ -64,5 +69,6 @@ export const properties = [
     area: "350 sqm",
     image: "/properties/ikoyi-terrace.png",
     verified: true,
+    whatsapp: "+2348066666666",
   },
 ];
