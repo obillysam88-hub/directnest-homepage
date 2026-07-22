@@ -118,7 +118,7 @@ function parseNum(value) {
   return Number.isFinite(n) ? n : 0;
 }
 
-export default function EscrowPage({ onBack }) {
+export default function EscrowPage({ onBack, property }) {
   const [duration, setDuration] = useState(RENT_DURATIONS[0]);
   const [annualRent, setAnnualRent] = useState("");
   const [legalFee, setLegalFee] = useState("");
@@ -157,12 +157,12 @@ export default function EscrowPage({ onBack }) {
       </button>
 
       {/* RENT tab only */}
-      <div className="mb-6 flex items-center gap-2">
-        <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+      <div className="mb-6 flex items-start gap-2">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
           <ShieldCheck className="size-5" />
         </div>
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-bold">24-Hour Booking Escrow</h1>
             <Badge className="bg-primary/10 text-primary ring-1 ring-primary/20">
               RENT
@@ -174,6 +174,30 @@ export default function EscrowPage({ onBack }) {
           </p>
         </div>
       </div>
+
+      {/* Reserved property context */}
+      {property && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-border bg-card p-3">
+          {property.image && (
+            <img
+              src={property.image}
+              alt={property.title}
+              className="size-12 rounded-md object-cover"
+            />
+          )}
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold">{property.title}</p>
+            <p className="truncate text-xs text-muted-foreground">
+              {property.location}
+            </p>
+          </div>
+          {property.fingerprintId && (
+            <Badge className="ml-auto shrink-0 bg-secondary text-muted-foreground ring-1 ring-border">
+              #{property.fingerprintId}
+            </Badge>
+          )}
+        </div>
+      )}
 
       {/* Status badge */}
       <div className="mb-4">

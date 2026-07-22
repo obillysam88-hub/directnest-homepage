@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ShieldCheck, CircleCheck as CheckCircle2, Circle as XCircle, Copy, TriangleAlert as AlertTriangle, IdCard, UserRound, FileCheck, Clock, Loader as Loader2, ArrowLeft, LayoutDashboard } from "lucide-react";
+import { ShieldCheck, CircleCheck as CheckCircle2, Circle as XCircle, Copy, TriangleAlert as AlertTriangle, IdCard, UserRound, FileCheck, Clock, Loader as Loader2, ArrowLeft, LayoutDashboard, Lock } from "lucide-react";
 import { Button, Badge, cn } from "./components.jsx";
 
 /* ---------- Placeholder panel for KYC review ---------- */
@@ -256,7 +256,12 @@ export default function AdminDashboard({ onBack }) {
           <LayoutDashboard className="size-5" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+            <Badge className="bg-amber-50 text-amber-700 ring-1 ring-amber-200">
+              <Lock className="size-3.5" /> Restricted
+            </Badge>
+          </div>
           <p className="text-sm text-muted-foreground">
             Review KYC submissions, investigate fraud, and resolve duplicate listings.
           </p>

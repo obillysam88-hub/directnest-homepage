@@ -121,6 +121,10 @@ function App() {
     window.location.hash = "#/";
   };
 
+  const handleReserve = (property) => {
+    window.location.hash = `#/escrow/${property.id}`;
+  };
+
   if (isKyc) {
     return (
       <div className="min-h-screen bg-background">
@@ -156,11 +160,15 @@ function App() {
   }
 
   if (isEscrow) {
+    const escrowMatch = route.match(/^#\/escrow\/?(\w+)?/);
+    const propertyId = escrowMatch?.[1];
+    const reservedProperty =
+      allProperties.find((p) => p.id === propertyId) || null;
     return (
       <div className="min-h-screen bg-background">
         <SiteHeader onAddProperty={() => setModalOpen(true)} />
         <main>
-          <EscrowPage onBack={goHome} />
+          <EscrowPage onBack={goHome} property={reservedProperty} />
         </main>
         <SiteFooter />
         <AddPropertyModal
@@ -183,6 +191,7 @@ function App() {
           properties={filtered}
           isFiltered={isFiltered}
           onClearFilters={handleClearFilters}
+          onReserve={handleReserve}
         />
       </main>
       <SiteFooter />

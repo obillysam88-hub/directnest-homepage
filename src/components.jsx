@@ -11,6 +11,8 @@ import {
   Phone,
   Fingerprint,
   Search,
+  Lock,
+  Bookmark,
 } from "lucide-react";
 
 export function cn(...classes) {
@@ -113,8 +115,6 @@ export function SiteHeader({ onAddProperty }) {
           <a href="#listings" className="hover:text-foreground">Browse</a>
           <a href="#why" className="hover:text-foreground">Why Directnest</a>
           <a href="#/kyc" className="hover:text-foreground">KYC</a>
-          <a href="#/escrow" className="hover:text-foreground">Escrow</a>
-          <a href="#/admin" className="hover:text-foreground">Admin</a>
           <a href="#contact" className="hover:text-foreground">Contact</a>
         </nav>
         <Button onClick={onAddProperty}>List Property</Button>
@@ -238,7 +238,7 @@ const verificationBadges = [
   { label: "Verify Location", icon: MapPin },
 ];
 
-function PropertyCard({ property }) {
+function PropertyCard({ property, onReserve }) {
   const waNumber = (property.whatsapp || "").replace(/[^\d]/g, "");
   const waHref = waNumber ? `https://wa.me/${waNumber}` : null;
 
@@ -311,23 +311,32 @@ function PropertyCard({ property }) {
             Owner: {property.owner}
           </p>
         )}
-        {waHref && (
-          <a
-            href={waHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700"
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+          {waHref && (
+            <a
+              href={waHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700"
+            >
+              <MessageCircle className="size-4" />
+              Chat Owner
+            </a>
+          )}
+          <button
+            onClick={() => onReserve?.(property)}
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-primary bg-primary/5 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/10"
           >
-            <MessageCircle className="size-4" />
-            Chat Owner on WhatsApp
-          </a>
-        )}
+            <Bookmark className="size-4" />
+            Reserve
+          </button>
+        </div>
       </div>
     </article>
   );
 }
 
-export function PropertyGrid({ properties, onClearFilters, isFiltered }) {
+export function PropertyGrid({ properties, onClearFilters, isFiltered, onReserve }) {
   return (
     <section id="listings" className="mx-auto max-w-6xl px-4 py-10">
       <div className="mb-6 flex items-end justify-between">
@@ -357,7 +366,7 @@ export function PropertyGrid({ properties, onClearFilters, isFiltered }) {
       ) : (
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {properties.map((p) => (
-            <PropertyCard key={p.id} property={p} />
+            <PropertyCard key={p.id} property={p} onReserve={onReserve} />
           ))}
         </div>
       )}
@@ -386,8 +395,7 @@ export function SiteFooter() {
             <li><a href="#listings" className="hover:text-foreground">Browse listings</a></li>
             <li><a href="#why" className="hover:text-foreground">Why Directnest</a></li>
             <li><a href="#/kyc" className="hover:text-foreground">KYC Verification</a></li>
-            <li><a href="#/escrow" className="hover:text-foreground">Rent Escrow</a></li>
-            <li><a href="#/admin" className="hover:text-foreground">Admin Dashboard</a></li>
+            <li><a href="#contact" className="hover:text-foreground">Contact</a></li>
           </ul>
         </div>
         <div>
