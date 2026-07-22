@@ -11,6 +11,8 @@ import {
 } from "./src/components.jsx";
 import { AddPropertyModal } from "./src/listing-form.jsx";
 import KycPage from "./src/kyc-page.jsx";
+import AdminDashboard from "./src/admin-dashboard.jsx";
+import EscrowPage from "./src/escrow-page.jsx";
 import { properties as seedProperties } from "./src/data.js";
 
 const STORAGE_KEY = "directnest:user_properties:v1";
@@ -46,10 +48,13 @@ function App() {
   const [filters, setFilters] = useState({ location: "", maxPrice: "" });
   const route = useHashRoute();
   const isKyc = route.startsWith("#/kyc");
+  const isAdmin = route.startsWith("#/admin");
+  const isEscrow = route.startsWith("#/escrow");
+  const isSubpage = isKyc || isAdmin || isEscrow;
 
   useEffect(() => {
-    if (isKyc) window.scrollTo(0, 0);
-  }, [isKyc]);
+    if (isSubpage) window.scrollTo(0, 0);
+  }, [isSubpage]);
 
   useEffect(() => {
     try {
@@ -122,6 +127,40 @@ function App() {
         <SiteHeader onAddProperty={() => setModalOpen(true)} />
         <main>
           <KycPage onBack={goHome} />
+        </main>
+        <SiteFooter />
+        <AddPropertyModal
+          open={modalOpen}
+          onClose={() => setModalOpen(false)}
+          onSubmit={handleAddProperty}
+        />
+      </div>
+    );
+  }
+
+  if (isAdmin) {
+    return (
+      <div className="min-h-screen bg-background">
+        <SiteHeader onAddProperty={() => setModalOpen(true)} />
+        <main>
+          <AdminDashboard onBack={goHome} />
+        </main>
+        <SiteFooter />
+        <AddPropertyModal
+          open={modalOpen}
+          onClose={() => setModalOpen(false)}
+          onSubmit={handleAddProperty}
+        />
+      </div>
+    );
+  }
+
+  if (isEscrow) {
+    return (
+      <div className="min-h-screen bg-background">
+        <SiteHeader onAddProperty={() => setModalOpen(true)} />
+        <main>
+          <EscrowPage onBack={goHome} />
         </main>
         <SiteFooter />
         <AddPropertyModal

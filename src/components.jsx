@@ -113,6 +113,8 @@ export function SiteHeader({ onAddProperty }) {
           <a href="#listings" className="hover:text-foreground">Browse</a>
           <a href="#why" className="hover:text-foreground">Why Directnest</a>
           <a href="#/kyc" className="hover:text-foreground">KYC</a>
+          <a href="#/escrow" className="hover:text-foreground">Escrow</a>
+          <a href="#/admin" className="hover:text-foreground">Admin</a>
           <a href="#contact" className="hover:text-foreground">Contact</a>
         </nav>
         <Button onClick={onAddProperty}>List Property</Button>
@@ -384,6 +386,8 @@ export function SiteFooter() {
             <li><a href="#listings" className="hover:text-foreground">Browse listings</a></li>
             <li><a href="#why" className="hover:text-foreground">Why Directnest</a></li>
             <li><a href="#/kyc" className="hover:text-foreground">KYC Verification</a></li>
+            <li><a href="#/escrow" className="hover:text-foreground">Rent Escrow</a></li>
+            <li><a href="#/admin" className="hover:text-foreground">Admin Dashboard</a></li>
           </ul>
         </div>
         <div>
