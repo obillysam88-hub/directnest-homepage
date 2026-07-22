@@ -1,6 +1,24 @@
 import { useEffect, useRef, useState } from "react";
-import { ShieldCheck, CloudUpload as UploadCloud, X, Loader as Loader2, CircleCheck as CheckCircle2, Video, Play, RefreshCw, Camera, CircleAlert as AlertCircle, ArrowLeft, IdCard, FileCheck, UserRound } from "lucide-react";
+import {
+  ShieldCheck,
+  CloudUpload as UploadCloud,
+  X,
+  Loader as Loader2,
+  CircleCheck as CheckCircle2,
+  Video,
+  RefreshCw,
+  Camera,
+  CircleAlert as AlertCircle,
+  ArrowLeft,
+  IdCard,
+  FileCheck,
+  UserRound,
+  Phone,
+  Mail,
+  User,
+} from "lucide-react";
 import { Button, Input, Label, Badge, cn } from "./components.jsx";
+import { supabase, KYC_BUCKET } from "./lib/supabase.js";
 
 /* ---------- Reusable document upload tile ---------- */
 function DocumentUpload({ label, value, onChange, hint }) {
@@ -91,7 +109,7 @@ function DocumentUpload({ label, value, onChange, hint }) {
 
 /* ---------- 5-second liveness video recorder with preview ---------- */
 function LivenessRecorder({ videoRef, onRecorded }) {
-  const [status, setStatus] = useState("idle"); // idle | previewing | recording | done | error
+  const [status, setStatus] = useState("idle");
   const [countdown, setCountdown] = useState(5);
   const [error, setError] = useState("");
   const mediaStreamRef = useRef(null);
@@ -183,7 +201,6 @@ function LivenessRecorder({ videoRef, onRecorded }) {
       <Label>Liveness verification video</Label>
       <div className="overflow-hidden rounded-lg border border-border bg-black">
         <div className="relative aspect-video w-full">
-          {/* live camera */}
           <video
             ref={videoRef}
             playsInline
@@ -195,7 +212,6 @@ function LivenessRecorder({ videoRef, onRecorded }) {
                 : "hidden"
             )}
           />
-          {/* recorded preview */}
           <video
             ref={previewVideoRef}
             controls
@@ -235,7 +251,7 @@ function LivenessRecorder({ videoRef, onRecorded }) {
         {status === "previewing" && (
           <>
             <Button type="button" onClick={startRecording}>
-              <Video className="size-4" /> Record 5-second video
+              <Video className="size-4" /> Record 5s Video
             </Button>
             <Button type="button" variant="outline" onClick={stopCamera}>
               Cancel
@@ -271,8 +287,25 @@ function LivenessRecorder({ videoRef, onRecorded }) {
   );
 }
 
+/* ---------- Helper: upload file to Supabase Storage ---------- */
+async function uploadFile(file, bucket, folder) {
+  const ext = file.name.split(".").pop() || "bin";
+  const path = `${folder}/${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2)}.${ext}`;
+  const { data, error } = await supabase.storage
+    .from(bucket)
+    .upload(path, file, { upsert: false });
+  if (error) throw error;
+  const { data: pub } = supabase.storage.from(bucket).getPublicUrl(path);
+  return pub.publicUrl;
+}
+
 /* ---------- KYC Page ---------- */
 export default function KycPage({ onBack }) {
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [nin, setNin] = useState("");
   const [bvn, setBvn] = useState("");
   const [idFront, setIdFront] = useState(null);
@@ -284,9 +317,13 @@ export default function KycPage({ onBack }) {
   const [error, setError] = useState("");
   const videoRef = useRef(null);
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
     setError("");
+    if (!fullName.trim()) return setError("Please enter your full name.");
+    if (!phone.trim()) return setError("Please enter your phone number.");
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      return setError("Please enter a valid email address.");
     if (!nin.trim() || nin.trim().length < 11)
       return setError("Please enter a valid 11-digit NIN.");
     if (!bvn.trim() || bvn.trim().length < 11)
@@ -296,11 +333,46 @@ export default function KycPage({ onBack }) {
     if (!proofOfOwnership)
       return setError("Please upload proof of ownership.");
     if (!liveness) return setError("Please record a liveness video.");
+
     setSubmitting(true);
-    setTimeout(() => {
-      setSubmitting(false);
+    try {
+      const folder = `kyc-${Date.now()}`;
+      const [frontUrl, backUrl, proofUrl, videoUrl] = await Promise.all([
+        uploadFile(idFront.file, KYC_BUCKET, folder),
+        uploadFile(idBack.file, KYC_BUCKET, folder),
+        uploadFile(proofOfOwnership.file, KYC_BUCKET, folder),
+        uploadFile(
+          new File([liveness.blob], "liveness.webm", { type: "video/webm" }),
+          KYC_BUCKET,
+          folder
+        ),
+      ]);
+
+      const { error: insertError } = await supabase
+        .from("landlord_kyc_submissions")
+        .insert({
+          full_name: fullName.trim(),
+          phone: phone.trim(),
+          email: email.trim(),
+          nin: nin.trim(),
+          bvn: bvn.trim(),
+          id_front_url: frontUrl,
+          id_back_url: backUrl,
+          proof_of_ownership_url: proofUrl,
+          liveness_video_url: videoUrl,
+          status: "pending",
+        });
+
+      if (insertError) throw insertError;
       setSubmitted(true);
-    }, 900);
+    } catch (err) {
+      setError(
+        "Submission failed: " +
+          (err.message || "Unknown error. Please try again.")
+      );
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   if (submitted) {
@@ -309,18 +381,20 @@ export default function KycPage({ onBack }) {
         <div className="flex size-16 items-center justify-center rounded-full bg-green-100 text-green-600">
           <CheckCircle2 className="size-8" />
         </div>
-        <h1 className="mt-5 text-2xl font-bold">Verification submitted</h1>
+        <h1 className="mt-5 text-2xl font-bold">Submitted!</h1>
         <p className="mt-2 text-muted-foreground">
-          Your KYC details and liveness video have been received. Our team will
-          review your submission and update your verification status within
-          24–48 hours.
+          We will review your KYC submission within 24 hours. You will receive an
+          email update once verification is complete.
         </p>
         <div className="mt-6 flex gap-2">
-          <Button onClick={onBack}>Back to listings</Button>
+          <Button onClick={onBack}>Back to home</Button>
           <Button
             variant="outline"
             onClick={() => {
               setSubmitted(false);
+              setFullName("");
+              setPhone("");
+              setEmail("");
               setNin("");
               setBvn("");
               setIdFront(null);
@@ -360,6 +434,44 @@ export default function KycPage({ onBack }) {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Personal info */}
+        <section className="space-y-4 rounded-xl border border-border bg-card p-5">
+          <h2 className="flex items-center gap-2 text-base font-semibold">
+            <User className="size-4 text-primary" /> Personal information
+          </h2>
+          <div>
+            <Label htmlFor="fullName">Full Name</Label>
+            <Input
+              id="fullName"
+              placeholder="e.g. Chidi Okafor"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+            />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="phone">Phone</Label>
+              <Input
+                id="phone"
+                type="tel"
+                placeholder="+234 800 000 0000"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+          </div>
+        </section>
+
         {/* Identity numbers */}
         <section className="space-y-4 rounded-xl border border-border bg-card p-5">
           <h2 className="flex items-center gap-2 text-base font-semibold">
@@ -429,10 +541,7 @@ export default function KycPage({ onBack }) {
           <h2 className="flex items-center gap-2 text-base font-semibold">
             <Video className="size-4 text-primary" /> Liveness check
           </h2>
-          <LivenessRecorder
-            videoRef={videoRef}
-            onRecorded={setLiveness}
-          />
+          <LivenessRecorder videoRef={videoRef} onRecorded={setLiveness} />
         </section>
 
         {error && (

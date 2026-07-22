@@ -13,6 +13,7 @@ import { AddPropertyModal } from "./src/listing-form.jsx";
 import KycPage from "./src/kyc-page.jsx";
 import AdminDashboard from "./src/admin-dashboard.jsx";
 import EscrowPage from "./src/escrow-page.jsx";
+import ListPropertyPage from "./src/list-property-page.jsx";
 import { properties as seedProperties } from "./src/data.js";
 
 const STORAGE_KEY = "directnest:user_properties:v1";
@@ -50,7 +51,8 @@ function App() {
   const isKyc = route.startsWith("#/kyc");
   const isAdmin = route.startsWith("#/admin");
   const isEscrow = route.startsWith("#/escrow");
-  const isSubpage = isKyc || isAdmin || isEscrow;
+  const isListProperty = route.startsWith("#/list-property");
+  const isSubpage = isKyc || isAdmin || isEscrow || isListProperty;
 
   useEffect(() => {
     if (isSubpage) window.scrollTo(0, 0);
@@ -121,14 +123,35 @@ function App() {
     window.location.hash = "#/";
   };
 
+  const goListProperty = () => {
+    window.location.hash = "#/list-property";
+  };
+
   const handleReserve = (property) => {
     window.location.hash = `#/escrow/${property.id}`;
   };
 
+  if (isListProperty) {
+    return (
+      <div className="min-h-screen bg-background">
+        <SiteHeader onAddProperty={goListProperty} />
+        <main>
+          <ListPropertyPage onBack={goHome} />
+        </main>
+        <SiteFooter />
+        <AddPropertyModal
+          open={modalOpen}
+          onClose={() => setModalOpen(false)}
+          onSubmit={handleAddProperty}
+        />
+      </div>
+    );
+  }
+
   if (isKyc) {
     return (
       <div className="min-h-screen bg-background">
-        <SiteHeader onAddProperty={() => setModalOpen(true)} />
+        <SiteHeader onAddProperty={goListProperty} />
         <main>
           <KycPage onBack={goHome} />
         </main>
@@ -145,7 +168,7 @@ function App() {
   if (isAdmin) {
     return (
       <div className="min-h-screen bg-background">
-        <SiteHeader onAddProperty={() => setModalOpen(true)} />
+        <SiteHeader onAddProperty={goListProperty} />
         <main>
           <AdminDashboard onBack={goHome} />
         </main>
@@ -166,7 +189,7 @@ function App() {
       allProperties.find((p) => p.id === propertyId) || null;
     return (
       <div className="min-h-screen bg-background">
-        <SiteHeader onAddProperty={() => setModalOpen(true)} />
+        <SiteHeader onAddProperty={goListProperty} />
         <main>
           <EscrowPage onBack={goHome} property={reservedProperty} />
         </main>
@@ -182,11 +205,11 @@ function App() {
 
   return (
     <div className="min-h-screen bg-background">
-      <SiteHeader onAddProperty={() => setModalOpen(true)} />
+      <SiteHeader onAddProperty={goListProperty} />
       <main>
         <HeroSection onSearch={handleSearch} />
         <TrustBadges />
-        <AddPropertyCta onAddProperty={() => setModalOpen(true)} />
+        <AddPropertyCta onAddProperty={goListProperty} />
         <PropertyGrid
           properties={filtered}
           isFiltered={isFiltered}
