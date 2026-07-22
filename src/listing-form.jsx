@@ -652,6 +652,3 @@ export function AddPropertyModal({ open, onClose, onSubmit }) {
     </div>
   );
 }
-
-
-export { AddPropertyModal }
