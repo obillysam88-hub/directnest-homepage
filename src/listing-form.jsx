@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { MapPin, Search, CloudUpload as UploadCloud, X, Image as ImageIcon, Loader as Loader2, Crosshair, CircleCheck as CheckCircle2 } from "lucide-react";
+import { MapPin, Search, CloudUpload as UploadCloud, X, Image as ImageIcon, Loader as Loader2, Crosshair, CircleCheck as CheckCircle2, Camera } from "lucide-react";
 import {
   Button,
   Input,
@@ -299,6 +299,7 @@ export function ImageUploader({ images, setImages }) {
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState("");
   const inputRef = useRef(null);
+  const cameraRef = useRef(null);
 
   const MIN = 5;
   const MAX = 20;
@@ -380,6 +381,31 @@ export function ImageUploader({ images, setImages }) {
           ref={inputRef}
           type="file"
           accept="image/*"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            addFiles(e.target.files);
+            e.target.value = "";
+          }}
+        />
+      </div>
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          className="flex-1"
+          onClick={(e) => {
+            e.stopPropagation();
+            cameraRef.current?.click();
+          }}
+        >
+          <Camera className="size-4" /> Take Photo
+        </Button>
+        <input
+          ref={cameraRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
           multiple
           className="hidden"
           onChange={(e) => {
@@ -626,3 +652,6 @@ export function AddPropertyModal({ open, onClose, onSubmit }) {
     </div>
   );
 }
+
+
+export { AddPropertyModal }
