@@ -7,9 +7,10 @@ import {
   TrustBadges,
   AddPropertyCta,
   PropertyGrid,
-  AddPropertyModal,
   SiteFooter,
 } from "./src/components.jsx";
+import { AddPropertyModal } from "./src/listing-form.jsx";
+import KycPage from "./src/kyc-page.jsx";
 import { properties as seedProperties } from "./src/data.js";
 
 const STORAGE_KEY = "directnest:user_properties:v1";
@@ -29,10 +30,26 @@ function parsePrice(value) {
   return Number.isFinite(num) ? num : null;
 }
 
+function useHashRoute() {
+  const [route, setRoute] = useState(() => window.location.hash || "#/");
+  useEffect(() => {
+    const onChange = () => setRoute(window.location.hash || "#/");
+    window.addEventListener("hashchange", onChange);
+    return () => window.removeEventListener("hashchange", onChange);
+  }, []);
+  return route;
+}
+
 function App() {
   const [userProperties, setUserProperties] = useState(loadUserProperties);
   const [modalOpen, setModalOpen] = useState(false);
   const [filters, setFilters] = useState({ location: "", maxPrice: "" });
+  const route = useHashRoute();
+  const isKyc = route.startsWith("#/kyc");
+
+  useEffect(() => {
+    if (isKyc) window.scrollTo(0, 0);
+  }, [isKyc]);
 
   useEffect(() => {
     try {
@@ -63,6 +80,7 @@ function App() {
 
   const handleAddProperty = (entry) => {
     const id = `u-${Date.now()}`;
+    const fingerprintId = `DN-${String(Date.now()).slice(-3)}`;
     const newProperty = {
       id,
       title: entry.title,
@@ -72,10 +90,15 @@ function App() {
       baths: 0,
       area: "—",
       image: entry.image || "",
+      images: entry.images || [],
       verified: false,
       description: entry.description,
       owner: entry.owner,
       whatsapp: entry.whatsapp,
+      fingerprintId,
+      propertyType: entry.propertyType,
+      lat: entry.lat ?? null,
+      lng: entry.lng ?? null,
     };
     setUserProperties((prev) => [newProperty, ...prev]);
     setModalOpen(false);
@@ -88,6 +111,27 @@ function App() {
   };
 
   const handleClearFilters = () => setFilters({ location: "", maxPrice: "" });
+
+  const goHome = () => {
+    window.location.hash = "#/";
+  };
+
+  if (isKyc) {
+    return (
+      <div className="min-h-screen bg-background">
+        <SiteHeader onAddProperty={() => setModalOpen(true)} />
+        <main>
+          <KycPage onBack={goHome} />
+        </main>
+        <SiteFooter />
+        <AddPropertyModal
+          open={modalOpen}
+          onClose={() => setModalOpen(false)}
+          onSubmit={handleAddProperty}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">

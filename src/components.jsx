@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-  Search,
   ShieldCheck,
   Bed,
   Bath,
@@ -10,19 +9,27 @@ import {
   MessageCircle,
   Chrome as Home,
   Phone,
-  X,
-  Upload,
+  Fingerprint,
+  Search,
 } from "lucide-react";
 
-function cn(...classes) {
+export function cn(...classes) {
   return classes.filter(Boolean).join(" ");
 }
 
-function Button({ children, className, ...props }) {
+export function Button({ children, className, variant = "default", ...props }) {
+  const variants = {
+    default:
+      "bg-primary text-primary-foreground hover:opacity-90",
+    outline:
+      "border border-border bg-card text-foreground hover:bg-secondary",
+    ghost: "text-foreground hover:bg-secondary",
+  };
   return (
     <button
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50",
+        "inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50",
+        variants[variant] || variants.default,
         className
       )}
       {...props}
@@ -32,7 +39,7 @@ function Button({ children, className, ...props }) {
   );
 }
 
-function Input({ className, ...props }) {
+export function Input({ className, ...props }) {
   return (
     <input
       className={cn(
@@ -44,7 +51,7 @@ function Input({ className, ...props }) {
   );
 }
 
-function Textarea({ className, ...props }) {
+export function Textarea({ className, ...props }) {
   return (
     <textarea
       className={cn(
@@ -56,7 +63,7 @@ function Textarea({ className, ...props }) {
   );
 }
 
-function Label({ children, htmlFor }) {
+export function Label({ children, htmlFor }) {
   return (
     <label htmlFor={htmlFor} className="mb-1 block text-sm font-medium">
       {children}
@@ -64,16 +71,31 @@ function Label({ children, htmlFor }) {
   );
 }
 
-function Badge({ children, className }) {
+export function Badge({ children, className, ...props }) {
   return (
     <span
       className={cn(
         "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium",
         className
       )}
+      {...props}
     >
       {children}
     </span>
+  );
+}
+
+export function Select({ className, children, ...props }) {
+  return (
+    <select
+      className={cn(
+        "h-10 w-full rounded-md border border-border bg-card px-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/40",
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </select>
   );
 }
 
@@ -81,15 +103,16 @@ export function SiteHeader({ onAddProperty }) {
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-        <div className="flex items-center gap-2">
+        <a href="#/" className="flex items-center gap-2">
           <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <Home className="size-4" />
           </div>
           <span className="text-lg font-extrabold tracking-tight">Directnest</span>
-        </div>
+        </a>
         <nav className="hidden items-center gap-6 text-sm font-medium text-muted-foreground md:flex">
           <a href="#listings" className="hover:text-foreground">Browse</a>
           <a href="#why" className="hover:text-foreground">Why Directnest</a>
+          <a href="#/kyc" className="hover:text-foreground">KYC</a>
           <a href="#contact" className="hover:text-foreground">Contact</a>
         </nav>
         <Button onClick={onAddProperty}>List Property</Button>
@@ -207,6 +230,12 @@ export function AddPropertyCta({ onAddProperty }) {
   );
 }
 
+const verificationBadges = [
+  { label: "Verify Owner", icon: BadgeCheck },
+  { label: "Verify Property", icon: ShieldCheck },
+  { label: "Verify Location", icon: MapPin },
+];
+
 function PropertyCard({ property }) {
   const waNumber = (property.whatsapp || "").replace(/[^\d]/g, "");
   const waHref = waNumber ? `https://wa.me/${waNumber}` : null;
@@ -214,12 +243,18 @@ function PropertyCard({ property }) {
   return (
     <article className="overflow-hidden rounded-xl border border-border bg-card shadow-sm transition hover:shadow-md">
       <div className="relative aspect-[4/3] overflow-hidden bg-secondary">
-        <img
-          src={property.image}
-          alt={property.title}
-          className="size-full object-cover"
-          loading="lazy"
-        />
+        {property.image ? (
+          <img
+            src={property.image}
+            alt={property.title}
+            className="size-full object-cover"
+            loading="lazy"
+          />
+        ) : (
+          <div className="flex size-full items-center justify-center text-muted-foreground">
+            <Home className="size-10" />
+          </div>
+        )}
         {property.verified && (
           <Badge className="absolute left-3 top-3 bg-primary/90 text-primary-foreground">
             <BadgeCheck className="size-3.5" />
@@ -228,14 +263,31 @@ function PropertyCard({ property }) {
         )}
       </div>
       <div className="p-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <h3 className="font-semibold">{property.title}</h3>
-          <span className="text-sm font-bold text-primary">{property.price}</span>
+          <span className="shrink-0 text-sm font-bold text-primary">{property.price}</span>
         </div>
+        {property.fingerprintId && (
+          <p className="mt-1 flex items-center gap-1 text-xs font-medium text-muted-foreground">
+            <Fingerprint className="size-3.5" />
+            Property Fingerprint ID: #{property.fingerprintId}
+          </p>
+        )}
         <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
           <MapPin className="size-3.5" />
           {property.location}
         </p>
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          {verificationBadges.map(({ label, icon: Icon }) => (
+            <Badge
+              key={label}
+              className="bg-green-50 text-green-700 ring-1 ring-green-200"
+            >
+              <Icon className="size-3.5" />
+              {label}
+            </Badge>
+          ))}
+        </div>
         <div className="mt-3 flex items-center gap-4 text-sm text-muted-foreground">
           <span className="flex items-center gap-1">
             <Bed className="size-4" /> {property.beds}
@@ -311,193 +363,17 @@ export function PropertyGrid({ properties, onClearFilters, isFiltered }) {
   );
 }
 
-export function AddPropertyModal({ open, onClose, onSubmit }) {
-  const [form, setForm] = useState({
-    title: "",
-    location: "",
-    price: "",
-    description: "",
-    owner: "",
-    whatsapp: "",
-  });
-  const [imageData, setImageData] = useState("");
-  const [error, setError] = useState("");
-
-  if (!open) return null;
-
-  const update = (field) => (e) =>
-    setForm((f) => ({ ...f, [field]: e.target.value }));
-
-  const handleImage = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      setError("Image must be under 2MB.");
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      setImageData(reader.result);
-      setError("");
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (
-      !form.title ||
-      !form.location ||
-      !form.price ||
-      !form.owner ||
-      !form.whatsapp
-    ) {
-      setError("Please fill in all required fields.");
-      return;
-    }
-    onSubmit({
-      ...form,
-      image: imageData || "",
-    });
-    setForm({
-      title: "",
-      location: "",
-      price: "",
-      description: "",
-      owner: "",
-      whatsapp: "",
-    });
-    setImageData("");
-    setError("");
-  };
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-border bg-background p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-xl font-bold">List your property</h2>
-          <button
-            onClick={onClose}
-            className="rounded-md p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
-            aria-label="Close"
-          >
-            <X className="size-5" />
-          </button>
-        </div>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="title">Property Title *</Label>
-            <Input
-              id="title"
-              value={form.title}
-              onChange={update("title")}
-              placeholder="e.g. 4-Bedroom Duplex"
-            />
-          </div>
-          <div>
-            <Label htmlFor="location">Location *</Label>
-            <Input
-              id="location"
-              value={form.location}
-              onChange={update("location")}
-              placeholder="e.g. Lekki Phase 1, Lagos"
-            />
-          </div>
-          <div>
-            <Label htmlFor="price">Price *</Label>
-            <Input
-              id="price"
-              value={form.price}
-              onChange={update("price")}
-              placeholder="e.g. ₦85,000,000"
-            />
-          </div>
-          <div>
-            <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              rows={3}
-              value={form.description}
-              onChange={update("description")}
-              placeholder="Short description of the property"
-            />
-          </div>
-          <div>
-            <Label htmlFor="image">Upload Image</Label>
-            <div className="flex items-center gap-3">
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-card px-4 py-2 text-sm font-medium hover:bg-secondary">
-                <Upload className="size-4" />
-                Choose file
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImage}
-                  className="hidden"
-                />
-              </label>
-              {imageData && (
-                <img
-                  src={imageData}
-                  alt="preview"
-                  className="h-12 w-12 rounded-md object-cover"
-                />
-              )}
-            </div>
-          </div>
-          <div>
-            <Label htmlFor="owner">Owner Name *</Label>
-            <Input
-              id="owner"
-              value={form.owner}
-              onChange={update("owner")}
-              placeholder="Your full name"
-            />
-          </div>
-          <div>
-            <Label htmlFor="whatsapp">WhatsApp Number *</Label>
-            <Input
-              id="whatsapp"
-              value={form.whatsapp}
-              onChange={update("whatsapp")}
-              placeholder="e.g. +234 801 234 5678"
-            />
-          </div>
-          {error && (
-            <p className="text-sm font-medium text-red-600">{error}</p>
-          )}
-          <div className="flex justify-end gap-2 pt-2">
-            <Button
-              type="button"
-              onClick={onClose}
-              className="bg-secondary text-foreground hover:bg-secondary/80"
-            >
-              Cancel
-            </Button>
-            <Button type="submit">Submit listing</Button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
 export function SiteFooter() {
   return (
     <footer id="contact" className="border-t border-border bg-secondary/40">
       <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:grid-cols-3">
         <div>
-          <div className="flex items-center gap-2">
+          <a href="#/" className="flex items-center gap-2">
             <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               <Home className="size-4" />
             </div>
             <span className="text-lg font-extrabold">Directnest</span>
-          </div>
+          </a>
           <p className="mt-3 text-sm text-muted-foreground">
             Nigeria's direct property marketplace. No agents, no hidden fees.
           </p>
@@ -507,7 +383,7 @@ export function SiteFooter() {
           <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
             <li><a href="#listings" className="hover:text-foreground">Browse listings</a></li>
             <li><a href="#why" className="hover:text-foreground">Why Directnest</a></li>
-            <li><a href="#" className="hover:text-foreground">List a property</a></li>
+            <li><a href="#/kyc" className="hover:text-foreground">KYC Verification</a></li>
           </ul>
         </div>
         <div>

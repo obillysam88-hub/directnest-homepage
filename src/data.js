@@ -10,6 +10,10 @@ export const properties = [
     image: "/properties/lekki-duplex.png",
     verified: true,
     whatsapp: "+2348011111111",
+    fingerprintId: "DN-001",
+    propertyType: "Duplex",
+    lat: 6.4474,
+    lng: 3.4765,
   },
   {
     id: "2",
@@ -22,6 +26,10 @@ export const properties = [
     image: "/properties/ikeja-apartment.png",
     verified: true,
     whatsapp: "+2348022222222",
+    fingerprintId: "DN-002",
+    propertyType: "Apartment",
+    lat: 6.6018,
+    lng: 3.3515,
   },
   {
     id: "3",
@@ -34,6 +42,10 @@ export const properties = [
     image: "/properties/ajah-bungalow.png",
     verified: true,
     whatsapp: "+2348033333333",
+    fingerprintId: "DN-003",
+    propertyType: "Bungalow",
+    lat: 6.4513,
+    lng: 3.5483,
   },
   {
     id: "4",
@@ -46,6 +58,10 @@ export const properties = [
     image: "/properties/vi-penthouse.png",
     verified: true,
     whatsapp: "+2348044444444",
+    fingerprintId: "DN-004",
+    propertyType: "Penthouse",
+    lat: 6.4281,
+    lng: 3.4219,
   },
   {
     id: "5",
@@ -58,6 +74,10 @@ export const properties = [
     image: "/properties/yaba-flat.png",
     verified: true,
     whatsapp: "+2348055555555",
+    fingerprintId: "DN-005",
+    propertyType: "Mini Flat",
+    lat: 6.5050,
+    lng: 3.3720,
   },
   {
     id: "6",
@@ -70,5 +90,22 @@ export const properties = [
     image: "/properties/ikoyi-terrace.png",
     verified: true,
     whatsapp: "+2348066666666",
+    fingerprintId: "DN-006",
+    propertyType: "Terrace",
+    lat: 6.4531,
+    lng: 3.4386,
   },
+];
+
+export const propertyTypes = [
+  "Duplex",
+  "Apartment",
+  "Bungalow",
+  "Penthouse",
+  "Mini Flat",
+  "Terrace",
+  "Detached House",
+  "Semi-Detached",
+  "Maisonette",
+  "Studio",
 ];
