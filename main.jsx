@@ -11,6 +11,7 @@ import {
 } from "./src/components.jsx";
 import { AddPropertyModal } from "./src/listing-form.jsx";
 import KycPage from "./src/kyc-page.jsx";
+import LoginPage from "./src/login-page.jsx";
 import AdminDashboard from "./src/admin-dashboard.jsx";
 import EscrowPage from "./src/escrow-page.jsx";
 import ListPropertyPage from "./src/list-property-page.jsx";
@@ -53,11 +54,12 @@ function App() {
   const [filters, setFilters] = useState({ location: "", maxPrice: "" });
   const route = useHashRoute();
   const isKyc = route.startsWith("#/kyc");
+  const isLogin = route.startsWith("#/login");
   const isAdmin = route.startsWith("#/admin");
   const isEscrow = route.startsWith("#/escrow");
   const isListProperty = route.startsWith("#/list-property");
   const isPropertyDetail = /^#\/property\//.test(route);
-  const isSubpage = isKyc || isAdmin || isEscrow || isListProperty || isPropertyDetail;
+  const isSubpage = isKyc || isLogin || isAdmin || isEscrow || isListProperty || isPropertyDetail;
 
   useEffect(() => {
     if (isSubpage) window.scrollTo(0, 0);
@@ -153,6 +155,18 @@ function App() {
           onClose={() => setModalOpen(false)}
           onSubmit={handleAddProperty}
         />
+      </div>
+    );
+  }
+
+  if (isLogin) {
+    return (
+      <div className="min-h-screen bg-background">
+        <SiteHeader onAddProperty={goListProperty} isVerified={isVerified} />
+        <main>
+          <LoginPage onBack={goHome} />
+        </main>
+        <SiteFooter />
       </div>
     );
   }

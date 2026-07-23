@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ShieldCheck,
   Bed,
@@ -13,7 +13,10 @@ import {
   Search,
   Lock,
   Bookmark,
+  LogOut,
+  User as UserIcon,
 } from "lucide-react";
+import { supabase } from "./lib/supabase.js";
 
 export function cn(...classes) {
   return classes.filter(Boolean).join(" ");
@@ -102,6 +105,29 @@ export function Select({ className, children, ...props }) {
 }
 
 export function SiteHeader({ onAddProperty, isVerified }) {
+  const [authUser, setAuthUser] = useState(null);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    supabase.auth.getUser().then(({ data }) => {
+      if (mounted) setAuthUser(data.user);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
+      if (mounted) setAuthUser(session?.user ?? null);
+    });
+    return () => {
+      mounted = false;
+      sub.subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    await supabase.auth.signOut();
+    window.location.reload();
+  };
+
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
@@ -124,7 +150,42 @@ export function SiteHeader({ onAddProperty, isVerified }) {
               Fully Verified
             </Badge>
           )}
-          <Button onClick={onAddProperty}>List Property</Button>
+          {authUser ? (
+            <>
+              <a
+                href="#/profile"
+                className="inline-flex size-9 items-center justify-center rounded-full border border-border bg-card text-foreground transition hover:bg-secondary"
+                aria-label="Profile"
+              >
+                <UserIcon className="size-4" />
+              </a>
+              <Button
+                variant="outline"
+                onClick={handleLogout}
+                disabled={loggingOut}
+                className="gap-1.5"
+              >
+                <LogOut className="size-4" />
+                {loggingOut ? "Logging out…" : "Logout"}
+              </Button>
+            </>
+          ) : (
+            <>
+              <a
+                href="#/login"
+                className="inline-flex items-center justify-center rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground transition hover:bg-secondary"
+              >
+                Login
+              </a>
+              <a
+                href="#/login?mode=signup"
+                className="inline-flex items-center justify-center rounded-md bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700"
+              >
+                Sign Up
+              </a>
+            </>
+          )}
+          <Button onClick={onAddProperty} className="hidden sm:inline-flex">List Property</Button>
         </div>
       </div>
     </header>
