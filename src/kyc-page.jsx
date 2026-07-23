@@ -480,6 +480,86 @@ function LivenessCamera({ onComplete }) {
   );
 }
 
+/* ---------- Step 4: Fraud Checks + Submit ---------- */
+function Step4FraudChecks({ nin, ocrData, verificationLevel, faceMatchScore, preChecks, runPreChecks, onSubmit, submitting, error, onBack, onRetakePhotos }) {
+  const faceMatchPassed = faceMatchScore !== null && faceMatchScore >= 0.7;
+  const blacklistPassed = preChecks.blacklist === true;
+  const rateLimitPassed = preChecks.rateLimit === true;
+  const allPassed = blacklistPassed && rateLimitPassed && faceMatchPassed;
+
+  useEffect(() => {
+    runPreChecks();
+  }, [runPreChecks]);
+
+  return (
+    <div className="space-y-6">
+      <section className="space-y-4 rounded-xl border border-border bg-card p-5">
+        <h2 className="flex items-center gap-2 text-base font-semibold"><Fingerprint className="size-4 text-primary" /> Fraud Checks</h2>
+        <div className="space-y-3">
+          <div className="flex items-center gap-3 rounded-lg border border-border p-3">
+            {preChecks.loading ? <Loader2 className="size-5 animate-spin text-muted-foreground" /> : blacklistPassed ? <CheckCircle2 className="size-5 text-green-600" /> : <AlertCircle className="size-5 text-red-600" />}
+            <div><p className="text-sm font-medium">NIN Blacklist Check</p><p className="text-xs text-muted-foreground">Checking against blocked IDs</p></div>
+            {preChecks.loading ? <Badge className="ml-auto bg-secondary text-muted-foreground">Checking…</Badge> : <Badge className={cn("ml-auto", blacklistPassed ? "bg-green-50 text-green-700 ring-1 ring-green-200" : "bg-red-50 text-red-700 ring-1 ring-red-200")}>{blacklistPassed ? "Clear" : "Blocked"}</Badge>}
+          </div>
+          <div className="flex items-center gap-3 rounded-lg border border-border p-3">
+            {preChecks.loading ? <Loader2 className="size-5 animate-spin text-muted-foreground" /> : rateLimitPassed ? <CheckCircle2 className="size-5 text-green-600" /> : <AlertCircle className="size-5 text-red-600" />}
+            <div><p className="text-sm font-medium">Rate Limit Check</p><p className="text-xs text-muted-foreground">1 attempt per NIN per 24 hours</p></div>
+            {preChecks.loading ? <Badge className="ml-auto bg-secondary text-muted-foreground">Checking…</Badge> : <Badge className={cn("ml-auto", rateLimitPassed ? "bg-green-50 text-green-700 ring-1 ring-green-200" : "bg-red-50 text-red-700 ring-1 ring-red-200")}>{rateLimitPassed ? "OK" : "Locked"}</Badge>}
+          </div>
+          <div className="flex items-center gap-3 rounded-lg border p-3">
+            {faceMatchPassed ? <CheckCircle2 className="size-5 text-green-600" /> : <AlertCircle className="size-5 text-red-600" />}
+            <div><p className="text-sm font-medium">Face Match</p><p className="text-xs text-muted-foreground">Score: {faceMatchScore !== null ? `${(faceMatchScore * 100).toFixed(1)}%` : "Not run"} (threshold: 70%)</p></div>
+            <Badge className={cn("ml-auto", faceMatchPassed ? "bg-green-50 text-green-700 ring-1 ring-green-200" : "bg-red-50 text-red-700 ring-1 ring-red-200")}>{faceMatchPassed ? "Pass" : "Fail"}</Badge>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-border bg-card p-5">
+        <h3 className="mb-3 text-sm font-semibold">Verification Summary</h3>
+        <div className="grid gap-2 text-sm">
+          <div className="flex justify-between"><span className="text-muted-foreground">NIN</span><span className="font-mono">{nin.replace(/(\d{4})(\d{3})(\d{4})/, "•••••••$3")}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Name</span><span>{ocrData.name}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Face Match</span><span>{faceMatchPassed ? "Passed" : "Failed"}</span></div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Verification Level</span>
+            <Badge className={cn(verificationLevel === "manual" ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200" : "bg-blue-50 text-blue-700 ring-1 ring-blue-200")}>
+              {verificationLevel === "manual" ? <PencilLine className="size-3" /> : <Sparkles className="size-3" />}
+              {verificationLevel === "manual" ? "Manual" : "Auto"}
+            </Badge>
+          </div>
+        </div>
+      </section>
+
+      {!allPassed && !preChecks.loading && (
+        <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4">
+          <AlertCircle className="mt-0.5 size-5 shrink-0 text-red-600" />
+          <div>
+            <p className="text-sm font-semibold text-red-700">
+              {!faceMatchPassed ? "Faces don't match. Please retake NIN photo and Selfie." : !blacklistPassed ? "This ID is blacklisted." : "Rate limit active — try again later."}
+            </p>
+            {!faceMatchPassed && <p className="mt-1 text-xs text-red-600">Go back to retake your selfie and re-run the face match.</p>}
+          </div>
+        </div>
+      )}
+
+      {error && <p className="flex items-center gap-1.5 text-sm font-medium text-red-600"><AlertCircle className="size-4" /> {error}</p>}
+
+      <div className="flex gap-2">
+        <Button variant="outline" onClick={onBack} className="flex-1 sm:flex-none"><ArrowLeftIcon className="size-4" /> Back</Button>
+        {allPassed ? (
+          <Button onClick={onSubmit} disabled={submitting} className="flex-1 bg-green-600 text-white hover:bg-green-700">
+            {submitting ? <><Loader2 className="size-4 animate-spin" /> Verifying…</> : <><ShieldCheck className="size-4" /> Complete Verification</>}
+          </Button>
+        ) : (
+          <Button onClick={onRetakePhotos} className="flex-1 bg-green-600 text-white hover:bg-green-700">
+            <Camera className="size-4" /> Retake Photos
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ---------- Main KYC Page ---------- */
 const ALL_STEPS = ["NIN Input", "Upload Slip", "OCR / Manual", "Selfie", "Verified"];
 
@@ -505,6 +585,7 @@ export default function KycPage({ onBack }) {
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [showTestControls, setShowTestControls] = useState(false);
   const [testMode, setTestMode] = useState(null);
+  const [preChecks, setPreChecks] = useState({ blacklist: null, rateLimit: null, loading: false });
 
   useEffect(() => {
     if (loading || !user) return;
@@ -552,6 +633,24 @@ export default function KycPage({ onBack }) {
     setOcrLoading(false);
   }
 
+  async function runPreChecks() {
+    setPreChecks({ blacklist: null, rateLimit: null, loading: true });
+    try {
+      const ninHash = await hashNin(nin.trim());
+      const { data: blacklistHit } = await supabase
+        .from("kyc_blacklist").select("id, reason").eq("nin_hash", ninHash).limit(1).maybeSingle();
+      const blacklistPass = !blacklistHit;
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data: recentAttempt } = await supabase
+        .from("kyc_attempts").select("id, created_at").eq("nin_hash", ninHash)
+        .gte("created_at", twentyFourHoursAgo).order("created_at", { ascending: false }).limit(1).maybeSingle();
+      const rateLimitPass = !recentAttempt;
+      setPreChecks({ blacklist: blacklistPass, rateLimit: rateLimitPass, loading: false });
+    } catch {
+      setPreChecks({ blacklist: true, rateLimit: true, loading: false });
+    }
+  }
+
   function retryOCR() {
     setSlipPhoto(null);
     setOcrData({ name: "", dob: "", gender: "" });
@@ -564,24 +663,38 @@ export default function KycPage({ onBack }) {
   async function runFaceMatch() {
     setFaceMatchLoading(true);
     setError("");
+    if (!ninFacePhoto || !ninFacePhoto.file) {
+      setError("Missing NIN face photo. Please retake the crop.");
+      setFaceMatchLoading(false);
+      return;
+    }
+    if (!selfieData || !selfieData.file) {
+      setError("Missing selfie. Please retake.");
+      setFaceMatchLoading(false);
+      return;
+    }
+    console.log("[FaceMatch] nin_face_photo:", { file: ninFacePhoto.file, url: ninFacePhoto.url, size: ninFacePhoto.file.size, type: ninFacePhoto.file.type });
+    console.log("[FaceMatch] liveness_selfie:", { file: selfieData.file, url: selfieData.url, size: selfieData.file.size, type: selfieData.file.type });
     try {
       if (testMode === "fail") { setFaceMatchScore(0.3); setFaceMatchLoading(false); return; }
       if (testMode === "pass") { setFaceMatchScore(0.85); setFaceMatchLoading(false); return; }
       await ensureModels();
       const idImg = new Image();
-      idImg.crossOrigin = "anonymous";
       idImg.src = ninFacePhoto.url;
       await new Promise((res, rej) => { idImg.onload = res; idImg.onerror = rej; });
+      console.log("[FaceMatch] NIN face image loaded:", idImg.naturalWidth, "x", idImg.naturalHeight);
       const selfieImg = new Image();
-      selfieImg.crossOrigin = "anonymous";
       selfieImg.src = selfieData.url;
       await new Promise((res, rej) => { selfieImg.onload = res; selfieImg.onerror = rej; });
+      console.log("[FaceMatch] Selfie image loaded:", selfieImg.naturalWidth, "x", selfieImg.naturalHeight);
       const result = await matchFaces(idImg, selfieImg);
+      console.log("[FaceMatch] Result:", result);
       setFaceMatchScore(result.score);
       if (result.reason && result.score === 0) setError(result.reason);
-    } catch {
-      setError("Face detection unavailable. Using simulated score.");
-      setFaceMatchScore(0.85);
+    } catch (err) {
+      console.error("[FaceMatch] Error:", err);
+      setError("Face detection failed. Please retake both the NIN crop and selfie.");
+      setFaceMatchScore(0);
     } finally {
       setFaceMatchLoading(false);
     }
@@ -589,6 +702,16 @@ export default function KycPage({ onBack }) {
 
   async function handleSubmit() {
     setError("");
+    if (!ninFacePhoto || !ninFacePhoto.file) {
+      setError("Missing NIN face photo. Please retake the crop.");
+      return;
+    }
+    if (!selfieData || !selfieData.file) {
+      setError("Missing selfie. Please retake.");
+      return;
+    }
+    console.log("[Submit] nin_face_photo:", { file: ninFacePhoto.file, url: ninFacePhoto.url, size: ninFacePhoto.file.size, type: ninFacePhoto.file.type });
+    console.log("[Submit] liveness_selfie:", { file: selfieData.file, url: selfieData.url, size: selfieData.file.size, type: selfieData.file.type });
     setSubmitting(true);
     try {
       const userId = await ensureUser();
@@ -957,53 +1080,19 @@ export default function KycPage({ onBack }) {
 
       {/* Step 4: Fraud Checks + Submit */}
       {step === 4 && (
-        <div className="space-y-6">
-          <section className="space-y-4 rounded-xl border border-border bg-card p-5">
-            <h2 className="flex items-center gap-2 text-base font-semibold"><Fingerprint className="size-4 text-primary" /> Fraud Checks</h2>
-            <div className="space-y-3">
-              <div className="flex items-center gap-3 rounded-lg border border-border p-3">
-                <CheckCircle2 className="size-5 text-green-600" />
-                <div><p className="text-sm font-medium">NIN Blacklist Check</p><p className="text-xs text-muted-foreground">Checking against blocked IDs</p></div>
-                <Badge className="ml-auto bg-green-50 text-green-700 ring-1 ring-green-200">Clear</Badge>
-              </div>
-              <div className="flex items-center gap-3 rounded-lg border border-border p-3">
-                <CheckCircle2 className="size-5 text-green-600" />
-                <div><p className="text-sm font-medium">Rate Limit Check</p><p className="text-xs text-muted-foreground">1 attempt per NIN per 24 hours</p></div>
-                <Badge className="ml-auto bg-green-50 text-green-700 ring-1 ring-green-200">OK</Badge>
-              </div>
-              <div className="flex items-center gap-3 rounded-lg border p-3">
-                {faceMatchScore > 0.7 ? <CheckCircle2 className="size-5 text-green-600" /> : <AlertCircle className="size-5 text-red-600" />}
-                <div><p className="text-sm font-medium">Face Match</p><p className="text-xs text-muted-foreground">Score: {(faceMatchScore * 100).toFixed(1)}% (threshold: 70%)</p></div>
-                <Badge className={cn("ml-auto", faceMatchScore > 0.7 ? "bg-green-50 text-green-700 ring-1 ring-green-200" : "bg-red-50 text-red-700 ring-1 ring-red-200")}>{faceMatchScore > 0.7 ? "Pass" : "Fail"}</Badge>
-              </div>
-            </div>
-          </section>
-
-          <section className="rounded-xl border border-border bg-card p-5">
-            <h3 className="mb-3 text-sm font-semibold">Verification Summary</h3>
-            <div className="grid gap-2 text-sm">
-              <div className="flex justify-between"><span className="text-muted-foreground">NIN</span><span className="font-mono">{nin.replace(/(\d{4})(\d{3})(\d{4})/, "•••••••$3")}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Name</span><span>{ocrData.name}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Face Match</span><span>{faceMatchScore > 0.7 ? "Passed" : "Failed"}</span></div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Verification Level</span>
-                <Badge className={cn(verificationLevel === "manual" ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200" : "bg-blue-50 text-blue-700 ring-1 ring-blue-200")}>
-                  {verificationLevel === "manual" ? <PencilLine className="size-3" /> : <Sparkles className="size-3" />}
-                  {verificationLevel === "manual" ? "Manual" : "Auto"}
-                </Badge>
-              </div>
-            </div>
-          </section>
-
-          {error && <p className="flex items-center gap-1.5 text-sm font-medium text-red-600"><AlertCircle className="size-4" /> {error}</p>}
-
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setStep(3)} className="flex-1 sm:flex-none"><ArrowLeftIcon className="size-4" /> Back</Button>
-            <Button onClick={handleSubmit} disabled={submitting} className="flex-1 bg-green-600 text-white hover:bg-green-700">
-              {submitting ? <><Loader2 className="size-4 animate-spin" /> Verifying…</> : <><ShieldCheck className="size-4" /> Complete Verification</>}
-            </Button>
-          </div>
-        </div>
+        <Step4FraudChecks
+          nin={nin}
+          ocrData={ocrData}
+          verificationLevel={verificationLevel}
+          faceMatchScore={faceMatchScore}
+          preChecks={preChecks}
+          runPreChecks={runPreChecks}
+          onSubmit={handleSubmit}
+          submitting={submitting}
+          error={error}
+          onBack={() => setStep(3)}
+          onRetakePhotos={() => { setSelfieData(null); setFaceMatchScore(null); setStep(3); }}
+        />
       )}
     </div>
   );
