@@ -726,8 +726,14 @@ export default function KycPage({ onBack }) {
     console.log("[Submit] liveness_selfie:", { file: selfieData.file, url: selfieData.url, size: selfieData.file.size, type: selfieData.file.type });
     setSubmitting(true);
     try {
+      const { data: authData } = await supabase.auth.getUser();
       const userId = await ensureUser();
-      if (!userId) throw new Error("Could not create or retrieve user session.");
+      if (!userId) {
+        setError("Session expired. Please log in again.");
+        setSubmitting(false);
+        setTimeout(() => { onBack(); }, 2000);
+        return;
+      }
       const ninHash = await hashNin(nin.trim());
 
       const { data: blacklistHit } = await supabase
@@ -799,6 +805,7 @@ export default function KycPage({ onBack }) {
         kyc_date: new Date().toISOString(),
         failed_attempts: 0, cooldown_until: null, id_type: "NIN", id_number: nin.trim(), full_name_on_id: ocrData.name,
       }).eq("id", userId);
+      await supabase.auth.refreshSession();
       await refreshUser();
       setToast("Verification Complete! You are now Fully Verified");
       setSubmitted(true);
