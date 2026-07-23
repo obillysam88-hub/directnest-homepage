@@ -634,7 +634,7 @@ export default function KycPage({ onBack }) {
     setOcrLoading(false);
   }
 
-  async function runPreChecks() {
+  const runPreChecks = useCallback(async () => {
     setPreChecks({ blacklist: null, rateLimit: null, loading: true });
     try {
       const ninHash = await hashNin(nin.trim());
@@ -650,7 +650,7 @@ export default function KycPage({ onBack }) {
     } catch {
       setPreChecks({ blacklist: true, rateLimit: true, loading: false });
     }
-  }
+  }, [nin]);
 
   function retryOCR() {
     setSlipPhoto(null);
