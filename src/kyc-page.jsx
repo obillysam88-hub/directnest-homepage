@@ -486,10 +486,13 @@ function Step4FraudChecks({ nin, ocrData, verificationLevel, faceMatchScore, pre
   const blacklistPassed = preChecks.blacklist === true;
   const rateLimitPassed = preChecks.rateLimit === true;
   const allPassed = blacklistPassed && rateLimitPassed && faceMatchPassed;
+  const hasRunRef = useRef(false);
 
   useEffect(() => {
+    if (hasRunRef.current) return;
+    hasRunRef.current = true;
     runPreChecks();
-  }, [runPreChecks]);
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -587,6 +590,9 @@ export default function KycPage({ onBack }) {
   const [showTestControls, setShowTestControls] = useState(false);
   const [testMode, setTestMode] = useState(null);
   const [preChecks, setPreChecks] = useState({ blacklist: null, rateLimit: null, loading: false });
+  const ninRef = useRef("");
+  ninRef.current = nin;
+  console.log("KYC RENDER");
 
   useEffect(() => {
     if (loading || !user) return;
@@ -637,7 +643,7 @@ export default function KycPage({ onBack }) {
   const runPreChecks = useCallback(async () => {
     setPreChecks({ blacklist: null, rateLimit: null, loading: true });
     try {
-      const ninHash = await hashNin(nin.trim());
+      const ninHash = await hashNin(ninRef.current.trim());
       const { data: blacklistHit } = await supabase
         .from("kyc_blacklist").select("id, reason").eq("nin_hash", ninHash).limit(1).maybeSingle();
       const blacklistPass = !blacklistHit;
@@ -650,7 +656,7 @@ export default function KycPage({ onBack }) {
     } catch {
       setPreChecks({ blacklist: true, rateLimit: true, loading: false });
     }
-  }, [nin]);
+  }, []);
 
   function retryOCR() {
     setSlipPhoto(null);
