@@ -66,10 +66,10 @@ async function ensureModels() {
 }
 
 async function matchFaces(idImageEl, selfieImageEl) {
-  const opts = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
+  const opts = new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.3 });
   const idDesc = await faceapi.detectSingleFace(idImageEl, opts).withFaceLandmarks().withFaceDescriptor();
   const selfieDesc = await faceapi.detectSingleFace(selfieImageEl, opts).withFaceLandmarks().withFaceDescriptor();
-  if (!idDesc || !selfieDesc) return { score: 0, reason: "Could not detect a face in one or both images." };
+  if (!idDesc || !selfieDesc) return { score: null, reason: "no_face", detail: !idDesc && !selfieDesc ? "neither" : !idDesc ? "nin" : "selfie" };
   const dist = faceapi.euclideanDistance(idDesc.descriptor, selfieDesc.descriptor);
   const similarity = Math.max(0, 1 - dist);
   return { score: similarity, reason: null };
@@ -297,7 +297,7 @@ function CropFaceTool({ imageUrl, onCrop }) {
       setSizeError(false);
       setCropped({ file, url });
       onCrop({ file, url });
-    }, "image/jpeg", 0.85);
+    }, "image/jpeg", 0.9);
   }
 
   function resetCrop() {
@@ -432,7 +432,7 @@ function LivenessCamera({ onComplete }) {
       const url = URL.createObjectURL(blob);
       onComplete({ file, url });
       setPhase("done");
-    }, "image/jpeg", 0.85);
+    }, "image/jpeg", 0.9);
   }
 
   return (
@@ -689,12 +689,17 @@ export default function KycPage({ onBack }) {
       console.log("[FaceMatch] Selfie image loaded:", selfieImg.naturalWidth, "x", selfieImg.naturalHeight);
       const result = await matchFaces(idImg, selfieImg);
       console.log("[FaceMatch] Result:", result);
-      setFaceMatchScore(result.score);
-      if (result.reason && result.score === 0) setError(result.reason);
+      if (result.score === null) {
+        setError("Face too small or blurry. Please retake with good light.");
+        setFaceMatchScore(null);
+      } else {
+        setFaceMatchScore(result.score);
+        if (result.reason) setError(result.reason);
+      }
     } catch (err) {
       console.error("[FaceMatch] Error:", err);
       setError("Face detection failed. Please retake both the NIN crop and selfie.");
-      setFaceMatchScore(0);
+      setFaceMatchScore(null);
     } finally {
       setFaceMatchLoading(false);
     }
@@ -1049,10 +1054,10 @@ export default function KycPage({ onBack }) {
             <div className="flex items-center justify-center gap-2 py-3 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Comparing faces…</div>
           )}
           {faceMatchScore !== null && !faceMatchLoading && (
-            <div className={cn("flex items-center gap-3 rounded-lg border p-4", faceMatchScore > 0.7 ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50")}>
-              {faceMatchScore > 0.7 ? <CheckCircle2 className="size-5 text-green-600" /> : <AlertCircle className="size-5 text-red-600" />}
+            <div className={cn("flex items-center gap-3 rounded-lg border p-4", faceMatchScore >= 0.7 ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50")}>
+              {faceMatchScore >= 0.7 ? <CheckCircle2 className="size-5 text-green-600" /> : <AlertCircle className="size-5 text-red-600" />}
               <div>
-                <p className={cn("text-sm font-semibold", faceMatchScore > 0.7 ? "text-green-700" : "text-red-700")}>Face Match Score: {(faceMatchScore * 100).toFixed(1)}%{faceMatchScore > 0.7 ? " — Pass" : " — Below threshold (70%)"}</p>
+                <p className={cn("text-sm font-semibold", faceMatchScore >= 0.7 ? "text-green-700" : "text-red-700")}>Face Match Score: {(faceMatchScore * 100).toFixed(1)}%{faceMatchScore >= 0.7 ? " — Pass" : " — Below threshold (70%)"}</p>
                 <p className="text-xs text-muted-foreground">Threshold: 70% (0.7)</p>
               </div>
             </div>
@@ -1073,7 +1078,7 @@ export default function KycPage({ onBack }) {
 
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setStep(2)} className="flex-1 sm:flex-none"><ArrowLeftIcon className="size-4" /> Back</Button>
-            <Button onClick={() => { setError(""); if (!selfieData) { setError("Please capture a selfie."); return; } if (faceMatchScore === null) { setError("Please run the face match."); return; } setStep(4); }} disabled={!selfieData || faceMatchScore === null} className="flex-1 bg-green-600 text-white hover:bg-green-700">Continue <ArrowRight className="size-4" /></Button>
+            <Button onClick={() => { setError(""); if (!selfieData) { setError("Please capture a selfie."); return; } if (faceMatchScore === null) { setError("Please run the face match."); return; } if (faceMatchScore < 0.7) { setError("Faces don't match. Please retake NIN photo and Selfie."); return; } setStep(4); }} disabled={!selfieData || faceMatchScore === null || faceMatchScore < 0.7} className="flex-1 bg-green-600 text-white hover:bg-green-700">Continue <ArrowRight className="size-4" /></Button>
           </div>
         </div>
       )}
