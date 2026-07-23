@@ -22,13 +22,15 @@ function KycQueueRow({ item, onApprove, onReject }) {
     <div className="rounded-xl border border-border bg-card p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="font-semibold">{item.full_name}</p>
+          <p className="font-semibold">{item.full_name_on_id || item.full_name}</p>
           <p className="text-xs text-muted-foreground">
-            NIN: {item.nin} · BVN: {item.bvn}
+            {item.id_type || "NIN"}: {item.id_number || item.nin}
           </p>
-          <p className="text-xs text-muted-foreground">
-            {item.phone} · {item.email}
-          </p>
+          {item.phone && item.email && (
+            <p className="text-xs text-muted-foreground">
+              {item.phone} · {item.email}
+            </p>
+          )}
         </div>
         {item.status === "pending" && (
           <Badge className="bg-amber-50 text-amber-700 ring-1 ring-amber-200">
@@ -46,11 +48,11 @@ function KycQueueRow({ item, onApprove, onReject }) {
           </Badge>
         )}
       </div>
-      <div className="grid gap-3 sm:grid-cols-3">
-        {["ID Front", "ID Back", "Proof of Ownership"].map((label, i) => {
-          const urls = [item.id_front_url, item.id_back_url, item.proof_of_ownership_url];
+      <div className="grid gap-3 sm:grid-cols-2">
+        {["ID Photo", "Selfie Holding ID"].map((label, i) => {
+          const urls = [item.id_photo_url, item.selfie_with_id_url];
           const url = urls[i];
-          const icons = [IdCard, IdCard, FileCheck];
+          const icons = [IdCard, UserRound];
           const Icon = icons[i];
           return (
             <div
@@ -89,18 +91,6 @@ function KycQueueRow({ item, onApprove, onReject }) {
           );
         })}
       </div>
-      {item.liveness_video_url && (
-        <div className="mt-3">
-          <p className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            <UserRound className="size-3.5" /> Liveness video
-          </p>
-          <video
-            src={item.liveness_video_url}
-            controls
-            className="h-40 w-full rounded-md border border-border bg-black object-cover"
-          />
-        </div>
-      )}
       {item.status === "pending" && (
         <div className="mt-4 flex flex-wrap gap-2">
           <Button

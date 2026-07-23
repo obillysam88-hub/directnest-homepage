@@ -241,32 +241,37 @@ const verificationBadges = [
 function PropertyCard({ property, onReserve }) {
   const waNumber = (property.whatsapp || "").replace(/[^\d]/g, "");
   const waHref = waNumber ? `https://wa.me/${waNumber}` : null;
+  const detailHref = `#/property/${property.id}`;
 
   return (
     <article className="overflow-hidden rounded-xl border border-border bg-card shadow-sm transition hover:shadow-md">
-      <div className="relative aspect-[4/3] overflow-hidden bg-secondary">
-        {property.image ? (
-          <img
-            src={property.image}
-            alt={property.title}
-            className="size-full object-cover"
-            loading="lazy"
-          />
-        ) : (
-          <div className="flex size-full items-center justify-center text-muted-foreground">
-            <Home className="size-10" />
-          </div>
-        )}
-        {property.verified && (
-          <Badge className="absolute left-3 top-3 bg-primary/90 text-primary-foreground">
-            <BadgeCheck className="size-3.5" />
-            Verified
-          </Badge>
-        )}
-      </div>
+      <a href={detailHref} className="block">
+        <div className="relative aspect-[4/3] overflow-hidden bg-secondary">
+          {property.image ? (
+            <img
+              src={property.image}
+              alt={property.title}
+              className="size-full object-cover"
+              loading="lazy"
+            />
+          ) : (
+            <div className="flex size-full items-center justify-center text-muted-foreground">
+              <Home className="size-10" />
+            </div>
+          )}
+          {property.verified && (
+            <Badge className="absolute left-3 top-3 bg-primary/90 text-primary-foreground">
+              <BadgeCheck className="size-3.5" />
+              Verified
+            </Badge>
+          )}
+        </div>
+      </a>
       <div className="p-4">
         <div className="flex items-center justify-between gap-2">
-          <h3 className="font-semibold">{property.title}</h3>
+          <a href={detailHref} className="font-semibold hover:text-primary">
+            {property.title}
+          </a>
           <span className="shrink-0 text-sm font-bold text-primary">{property.price}</span>
         </div>
         {property.fingerprintId && (
@@ -306,23 +311,14 @@ function PropertyCard({ property, onReserve }) {
             {property.description}
           </p>
         )}
-        {property.owner && (
-          <p className="mt-2 text-xs text-muted-foreground">
-            Owner: {property.owner}
-          </p>
-        )}
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-          {waHref && (
-            <a
-              href={waHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700"
-            >
-              <MessageCircle className="size-4" />
-              Chat Owner
-            </a>
-          )}
+          <a
+            href={detailHref}
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700"
+          >
+            <MessageCircle className="size-4" />
+            View Details
+          </a>
           <button
             onClick={() => onReserve?.(property)}
             className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-primary bg-primary/5 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/10"

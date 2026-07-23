@@ -14,6 +14,7 @@ import KycPage from "./src/kyc-page.jsx";
 import AdminDashboard from "./src/admin-dashboard.jsx";
 import EscrowPage from "./src/escrow-page.jsx";
 import ListPropertyPage from "./src/list-property-page.jsx";
+import PropertyDetailPage from "./src/property-detail-page.jsx";
 import { properties as seedProperties } from "./src/data.js";
 
 const STORAGE_KEY = "directnest:user_properties:v1";
@@ -52,7 +53,8 @@ function App() {
   const isAdmin = route.startsWith("#/admin");
   const isEscrow = route.startsWith("#/escrow");
   const isListProperty = route.startsWith("#/list-property");
-  const isSubpage = isKyc || isAdmin || isEscrow || isListProperty;
+  const isPropertyDetail = /^#\/property\//.test(route);
+  const isSubpage = isKyc || isAdmin || isEscrow || isListProperty || isPropertyDetail;
 
   useEffect(() => {
     if (isSubpage) window.scrollTo(0, 0);
@@ -127,6 +129,10 @@ function App() {
     window.location.hash = "#/list-property";
   };
 
+  const goKyc = () => {
+    window.location.hash = "#/kyc";
+  };
+
   const handleReserve = (property) => {
     window.location.hash = `#/escrow/${property.id}`;
   };
@@ -171,6 +177,32 @@ function App() {
         <SiteHeader onAddProperty={goListProperty} />
         <main>
           <AdminDashboard onBack={goHome} />
+        </main>
+        <SiteFooter />
+        <AddPropertyModal
+          open={modalOpen}
+          onClose={() => setModalOpen(false)}
+          onSubmit={handleAddProperty}
+        />
+      </div>
+    );
+  }
+
+  if (isPropertyDetail) {
+    const match = route.match(/^#\/property\/(\w+)/);
+    const propertyId = match?.[1];
+    const detailProperty =
+      allProperties.find((p) => p.id === propertyId) || null;
+    return (
+      <div className="min-h-screen bg-background">
+        <SiteHeader onAddProperty={goListProperty} />
+        <main>
+          <PropertyDetailPage
+            property={detailProperty}
+            onBack={goHome}
+            onReserve={handleReserve}
+            onVerify={goKyc}
+          />
         </main>
         <SiteFooter />
         <AddPropertyModal
