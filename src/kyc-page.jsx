@@ -1054,7 +1054,19 @@ export default function KycPage({ onBack }) {
             <h2 className="flex items-center gap-2 text-base font-semibold"><ScanFace className="size-4 text-primary" /> Liveness + Face Match</h2>
             <p className="text-sm text-muted-foreground">We'll capture a quick selfie following the prompts: <span className="font-medium text-foreground">Blink, Turn Left, Smile</span>. Your selfie will be compared to the cropped face from your NIN slip.</p>
             {!selfieData ? (
-              <LivenessCamera onComplete={(data) => setSelfieData(data)} />
+              <>
+                <div className="rounded-xl border border-green-200 bg-white p-5 shadow-sm">
+                  <div className="mb-3 text-center text-3xl">📸</div>
+                  <h3 className="mb-3 text-center text-base font-bold text-foreground">Complete Your Liveness Check</h3>
+                  <ul className="mx-auto mb-3 max-w-xs space-y-2 text-sm text-muted-foreground">
+                    <li className="flex items-start gap-2"><span className="mt-0.5 size-1.5 shrink-0 rounded-full bg-green-500" /> Use a well-lit room</li>
+                    <li className="flex items-start gap-2"><span className="mt-0.5 size-1.5 shrink-0 rounded-full bg-green-500" /> Face the camera directly</li>
+                    <li className="flex items-start gap-2"><span className="mt-0.5 size-1.5 shrink-0 rounded-full bg-green-500" /> Remove glasses and hat</li>
+                  </ul>
+                  <p className="text-center text-xs text-muted-foreground">Takes about 1 minute</p>
+                </div>
+                <LivenessCamera onComplete={(data) => setSelfieData(data)} />
+              </>
             ) : (
               <div className="space-y-3">
                 <div className="flex items-center gap-3 rounded-lg border border-green-200 bg-green-50 p-4">
