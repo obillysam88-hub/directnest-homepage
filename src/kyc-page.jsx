@@ -243,6 +243,8 @@ function CropFaceTool({ imageUrl, onCrop }) {
   const [box, setBox] = useState(null);
   const [start, setStart] = useState(null);
   const [cropped, setCropped] = useState(null);
+  const [sizeError, setSizeError] = useState(false);
+  const MIN_CROP = 120;
 
   function onPointerDown(e) {
     if (cropped) return;
@@ -287,7 +289,14 @@ function CropFaceTool({ imageUrl, onCrop }) {
       if (!blob) return;
       const url = URL.createObjectURL(blob);
       const file = new File([blob], `nin-face-${Date.now()}.jpg`, { type: "image/jpeg" });
+      if (canvas.width < MIN_CROP || canvas.height < MIN_CROP) {
+        setSizeError(true);
+        setCropped(null);
+        return;
+      }
+      setSizeError(false);
       setCropped({ file, url });
+      onCrop({ file, url });
     }, "image/jpeg", 0.85);
   }
 
@@ -295,6 +304,7 @@ function CropFaceTool({ imageUrl, onCrop }) {
     setCropped(null);
     setBox(null);
     setStart(null);
+    setSizeError(false);
   }
 
   return (
@@ -337,9 +347,20 @@ function CropFaceTool({ imageUrl, onCrop }) {
           </div>
         </div>
       )}
-      {!cropped && box && box.w > 20 && box.h > 20 && !dragging && (
+      {sizeError && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <AlertCircle className="size-5 shrink-0 text-amber-600" />
+          <p className="text-sm font-medium text-amber-700">Crop closer to the face. Minimum size is 120×120px.</p>
+        </div>
+      )}
+      {!cropped && !sizeError && box && box.w > 20 && box.h > 20 && !dragging && (
         <Button onClick={doCrop} className="w-full bg-green-600 text-white hover:bg-green-700">
           <CheckCircle2 className="size-4" /> Confirm Crop
+        </Button>
+      )}
+      {sizeError && (
+        <Button variant="outline" onClick={resetCrop} className="w-full">
+          <Crop className="size-4" /> Try Again
         </Button>
       )}
     </div>
