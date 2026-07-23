@@ -579,6 +579,7 @@ export default function KycPage({ onBack }) {
   const [faceMatchLoading, setFaceMatchLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [toast, setToast] = useState("");
   const [error, setError] = useState("");
   const [cooldownInfo, setCooldownInfo] = useState(null);
   const [blacklisted, setBlacklisted] = useState(false);
@@ -788,12 +789,14 @@ export default function KycPage({ onBack }) {
         status: "verified", verification_level: verificationLevel,
       });
       await supabase.from("users").update({
-        kyc_status: "approved", is_verified: true, badge: "Verified Renter",
+        kyc_status: "fully_verified", is_verified: true, badge: "Fully Verified",
+        kyc_date: new Date().toISOString(),
         failed_attempts: 0, cooldown_until: null, id_type: "NIN", id_number: nin.trim(), full_name_on_id: ocrData.name,
       }).eq("id", userId);
       await refreshUser();
-      setStep(4);
+      setToast("Verification Complete! You are now Fully Verified");
       setSubmitted(true);
+      setTimeout(() => { onBack(); }, 2500);
     } catch (err) {
       setError("Submission failed: " + (err.message || "Unknown error."));
     } finally {
@@ -868,6 +871,15 @@ export default function KycPage({ onBack }) {
       </div>
 
       <ProgressBar current={step} steps={ALL_STEPS} />
+
+      {toast && (
+        <div className="fixed left-1/2 top-6 z-50 -translate-x-1/2 animate-in fade-in slide-in-from-top-4">
+          <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-green-700 shadow-lg">
+            <CheckCircle2 className="size-5 text-green-600" />
+            {toast}
+          </div>
+        </div>
+      )}
 
       {/* Step 0: NIN Input */}
       {step === 0 && (

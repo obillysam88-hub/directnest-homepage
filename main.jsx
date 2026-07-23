@@ -47,7 +47,7 @@ function useHashRoute() {
 
 function App() {
   const { user } = useAuth();
-  const isVerified = user?.kyc_status === "approved";
+  const isVerified = user?.kyc_status === "fully_verified";
   const [userProperties, setUserProperties] = useState(loadUserProperties);
   const [modalOpen, setModalOpen] = useState(false);
   const [filters, setFilters] = useState({ location: "", maxPrice: "" });
@@ -143,7 +143,7 @@ function App() {
   if (isListProperty) {
     return (
       <div className="min-h-screen bg-background">
-        <SiteHeader onAddProperty={goListProperty} />
+        <SiteHeader onAddProperty={goListProperty} isVerified={isVerified} />
         <main>
           <ListPropertyPage onBack={goHome} />
         </main>
@@ -160,7 +160,7 @@ function App() {
   if (isKyc) {
     return (
       <div className="min-h-screen bg-background">
-        <SiteHeader onAddProperty={goListProperty} />
+        <SiteHeader onAddProperty={goListProperty} isVerified={isVerified} />
         <main>
           <KycPage onBack={goHome} />
         </main>
@@ -177,7 +177,7 @@ function App() {
   if (isAdmin) {
     return (
       <div className="min-h-screen bg-background">
-        <SiteHeader onAddProperty={goListProperty} />
+        <SiteHeader onAddProperty={goListProperty} isVerified={isVerified} />
         <main>
           <AdminDashboard onBack={goHome} />
         </main>
@@ -198,7 +198,7 @@ function App() {
       allProperties.find((p) => p.id === propertyId) || null;
     return (
       <div className="min-h-screen bg-background">
-        <SiteHeader onAddProperty={goListProperty} />
+        <SiteHeader onAddProperty={goListProperty} isVerified={isVerified} />
         <main>
           <PropertyDetailPage
             property={detailProperty}
@@ -224,7 +224,7 @@ function App() {
       allProperties.find((p) => p.id === propertyId) || null;
     return (
       <div className="min-h-screen bg-background">
-        <SiteHeader onAddProperty={goListProperty} />
+        <SiteHeader onAddProperty={goListProperty} isVerified={isVerified} />
         <main>
           <EscrowPage onBack={goHome} property={reservedProperty} />
         </main>
@@ -240,7 +240,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-background">
-      <SiteHeader onAddProperty={goListProperty} />
+      <SiteHeader onAddProperty={goListProperty} isVerified={isVerified} />
       <main>
         <HeroSection onSearch={handleSearch} />
         <TrustBadges />

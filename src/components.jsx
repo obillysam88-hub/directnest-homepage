@@ -101,7 +101,7 @@ export function Select({ className, children, ...props }) {
   );
 }
 
-export function SiteHeader({ onAddProperty }) {
+export function SiteHeader({ onAddProperty, isVerified }) {
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
@@ -117,7 +117,15 @@ export function SiteHeader({ onAddProperty }) {
           <a href="#/kyc" className="hover:text-foreground">KYC</a>
           <a href="#contact" className="hover:text-foreground">Contact</a>
         </nav>
-        <Button onClick={onAddProperty}>List Property</Button>
+        <div className="flex items-center gap-2">
+          {isVerified && (
+            <Badge className="bg-green-50 text-green-700 ring-1 ring-green-200">
+              <BadgeCheck className="size-3.5" />
+              Fully Verified
+            </Badge>
+          )}
+          <Button onClick={onAddProperty}>List Property</Button>
+        </div>
       </div>
     </header>
   );
