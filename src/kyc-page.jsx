@@ -726,12 +726,11 @@ export default function KycPage({ onBack }) {
     console.log("[Submit] liveness_selfie:", { file: selfieData.file, url: selfieData.url, size: selfieData.file.size, type: selfieData.file.type });
     setSubmitting(true);
     try {
-      const { data: authData } = await supabase.auth.getUser();
       const userId = await ensureUser();
       if (!userId) {
-        setError("Session expired. Please log in again.");
+        setError("Please log in to complete verification.");
         setSubmitting(false);
-        setTimeout(() => { onBack(); }, 2000);
+        setTimeout(() => { window.location.hash = "#/login"; }, 1500);
         return;
       }
       const ninHash = await hashNin(nin.trim());

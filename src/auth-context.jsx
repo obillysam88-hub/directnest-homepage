@@ -1,34 +1,18 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { supabase } from "./lib/supabase.js";
 
-const USER_ID_KEY = "directnest:user_id:v1";
-
 const AuthContext = createContext(null);
-
-function getStoredUserId() {
-  try {
-    return localStorage.getItem(USER_ID_KEY) || null;
-  } catch {
-    return null;
-  }
-}
-
-function setStoredUserId(id) {
-  try {
-    if (id) localStorage.setItem(USER_ID_KEY, id);
-    else localStorage.removeItem(USER_ID_KEY);
-  } catch {
-    // ignore quota errors
-  }
-}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [authUser, setAuthUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const refreshUser = useCallback(async () => {
-    const userId = getStoredUserId();
-    if (!userId) {
+    const { data: authData } = await supabase.auth.getUser();
+    const au = authData?.user ?? null;
+    setAuthUser(au);
+    if (!au) {
       setUser(null);
       setLoading(false);
       return;
@@ -36,37 +20,50 @@ export function AuthProvider({ children }) {
     const { data, error } = await supabase
       .from("users")
       .select("*")
-      .eq("id", userId)
+      .eq("id", au.id)
       .maybeSingle();
     if (error || !data) {
-      setUser(null);
-      setLoading(false);
-      return;
+      setUser({ id: au.id, email: au.email, kyc_status: "unverified", is_verified: false });
+    } else {
+      setUser(data);
     }
-    setUser(data);
     setLoading(false);
   }, []);
 
   useEffect(() => {
     refreshUser();
+    const { data: sub } = supabase.auth.onAuthStateChange(() => {
+      refreshUser();
+    });
+    return () => {
+      sub.subscription.unsubscribe();
+    };
   }, [refreshUser]);
 
   const ensureUser = useCallback(async () => {
-    let userId = getStoredUserId();
-    if (userId) {
-      await refreshUser();
-      return userId;
-    }
-    const { data, error } = await supabase
+    const { data: authData } = await supabase.auth.getUser();
+    const au = authData?.user ?? null;
+    if (!au) return null;
+
+    const { data: existing } = await supabase
       .from("users")
-      .insert({ kyc_status: "unverified", is_verified: false })
       .select("id")
-      .single();
-    if (error || !data) return null;
-    userId = data.id;
-    setStoredUserId(userId);
+      .eq("id", au.id)
+      .maybeSingle();
+
+    if (!existing) {
+      await supabase
+        .from("users")
+        .insert({
+          id: au.id,
+          email: au.email,
+          kyc_status: "unverified",
+          is_verified: false,
+        })
+        .eq("id", au.id);
+    }
     await refreshUser();
-    return userId;
+    return au.id;
   }, [refreshUser]);
 
   const setKycPending = useCallback(async () => {
@@ -79,7 +76,7 @@ export function AuthProvider({ children }) {
     await refreshUser();
   }, [ensureUser, refreshUser]);
 
-  const value = { user, loading, refreshUser, ensureUser, setKycPending };
+  const value = { user, authUser, loading, refreshUser, ensureUser, setKycPending };
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
