@@ -7,6 +7,14 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
+    chunkSizeWarningLimit: 1200,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "face-api": ["face-api.js"],
+        },
+      },
+    },
   },
   server: {
     host: true,

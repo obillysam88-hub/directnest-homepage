@@ -57,12 +57,14 @@ Deno.serve(async (req: Request) => {
       // In production, call NIMC verification API
       idValid = extractedName !== null && idNumber.length === 11;
     } else if (idType === "BVN") {
-      // BVN: validate via Paystack API
+      // TODO: Enable BVN at launch
+      // BVN: validate via Paystack API — DISABLED for v1
       // In production: call Paystack's BVN resolve endpoint
       // GET https://api.paystack.co/bvn/resolve/{bvn}
       // with Authorization: Bearer SECRET_KEY
-      const paystackResult = await validateBVNPaystack(idNumber);
-      idValid = paystackResult.valid;
+      // const paystackResult = await validateBVNPaystack(idNumber);
+      // idValid = paystackResult.valid;
+      idValid = false;
     }
 
     if (!idValid) {
@@ -224,20 +226,18 @@ async function simulateLivenessCheck(_videoUrl: string): Promise<boolean> {
   return true;
 }
 
-/* ---------- BVN validation via Paystack (replace with real API call) ---------- */
-async function validateBVNPaystack(bvn: string): Promise<{ valid: boolean }> {
-  // In production:
-  //   const response = await fetch(
-  //     `https://api.paystack.co/bvn/resolve/${bvn}`,
-  //     {
-  //       headers: {
-  //         Authorization: `Bearer ${Deno.env.get("PAYSTACK_SECRET_KEY")}`,
-  //         "Content-Type": "application/json"
-  //       }
-  //     }
-  //   );
-  //   const data = await response.json();
-  //   return { valid: data.status === true };
-  await new Promise((r) => setTimeout(r, 500));
-  return { valid: bvn.length === 11 };
-}
+// TODO: Enable BVN at launch
+// ---------- BVN validation via Paystack — DISABLED for v1 ----------
+// async function validateBVNPaystack(bvn: string): Promise<{ valid: boolean }> {
+//   const response = await fetch(
+//     `https://api.paystack.co/bvn/resolve/${bvn}`,
+//     {
+//       headers: {
+//         Authorization: `Bearer ${Deno.env.get("PAYSTACK_SECRET_KEY")}`,
+//         "Content-Type": "application/json"
+//       }
+//     }
+//   );
+//   const data = await response.json();
+//   return { valid: data.status === true };
+// }

@@ -84,7 +84,7 @@ export default function PropertyDetailPage({ property, onBack, onReserve, onVeri
   const isVerified = kycStatus === "approved";
   const gated = !isVerified;
 
-  // Load inspection status for this property
+  // Load inspection status + verified_users check
   const loadInspection = useCallback(async () => {
     if (!user?.id || !property?.id) return;
     const { data } = await supabase
