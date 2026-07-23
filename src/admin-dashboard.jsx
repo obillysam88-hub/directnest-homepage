@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { ShieldCheck, CircleCheck as CheckCircle2, Circle as XCircle, Copy, TriangleAlert as AlertTriangle, IdCard, UserRound, FileCheck, Clock, Loader as Loader2, ArrowLeft, LayoutDashboard, Lock, Chrome as Home, MapPin, RefreshCw } from "lucide-react";
+import { ShieldCheck, CircleCheck as CheckCircle2, Circle as XCircle, Copy, TriangleAlert as AlertTriangle, IdCard, UserRound, FileCheck, Clock, Loader as Loader2, ArrowLeft, LayoutDashboard, Lock, Chrome as Home, MapPin, RefreshCw, PencilLine, Sparkles } from "lucide-react";
 import { Button, Badge, cn } from "./components.jsx";
 import { supabase } from "./lib/supabase.js";
 
@@ -45,6 +45,16 @@ function KycQueueRow({ item, onApprove, onReject }) {
         {item.status === "rejected" && (
           <Badge className="bg-red-50 text-red-700 ring-1 ring-red-200">
             <XCircle className="size-3.5" /> Rejected
+          </Badge>
+        )}
+        {item.verification_level === "manual" && (
+          <Badge className="bg-amber-50 text-amber-700 ring-1 ring-amber-200">
+            <PencilLine className="size-3.5" /> Manual
+          </Badge>
+        )}
+        {item.verification_level === "auto" && (
+          <Badge className="bg-blue-50 text-blue-700 ring-1 ring-blue-200">
+            <Sparkles className="size-3.5" /> Auto
           </Badge>
         )}
       </div>
