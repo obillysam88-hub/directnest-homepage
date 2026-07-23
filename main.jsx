@@ -15,6 +15,7 @@ import AdminDashboard from "./src/admin-dashboard.jsx";
 import EscrowPage from "./src/escrow-page.jsx";
 import ListPropertyPage from "./src/list-property-page.jsx";
 import PropertyDetailPage from "./src/property-detail-page.jsx";
+import { AuthProvider } from "./src/auth-context.jsx";
 import { properties as seedProperties } from "./src/data.js";
 
 const STORAGE_KEY = "directnest:user_properties:v1";
@@ -261,6 +262,8 @@ function App() {
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <App />
+    <AuthProvider>
+      <App />
+    </AuthProvider>
   </React.StrictMode>
 );

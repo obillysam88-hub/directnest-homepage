@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   ArrowLeft,
   Bed,
@@ -17,57 +17,7 @@ import {
   Loader as Loader2,
 } from "lucide-react";
 import { Button, Badge, cn } from "./components.jsx";
-import { supabase } from "./lib/supabase.js";
-
-/* ---------- KYC status hook (reads from users table) ---------- */
-function useKycStatus() {
-  const [status, setStatus] = useState({
-    kyc_status: "unverified",
-    is_verified: false,
-    loading: true,
-  });
-
-  useEffect(() => {
-    (async () => {
-      try {
-        // Try to find the most recent KYC submission to derive status.
-        // In a no-auth app, we use the latest submission as the "current user".
-        const { data, error } = await supabase
-          .from("landlord_kyc_submissions")
-          .select("status")
-          .order("created_at", { ascending: false })
-          .limit(1);
-
-        if (error) throw error;
-
-        const latest = data?.[0];
-        if (latest) {
-          const isApproved = latest.status === "approved";
-          setStatus({
-            kyc_status: latest.status,
-            is_verified: isApproved,
-            loading: false,
-          });
-        } else {
-          setStatus({
-            kyc_status: "unverified",
-            is_verified: false,
-            loading: false,
-          });
-        }
-      } catch {
-        // If DB is unreachable, default to unverified (gated)
-        setStatus({
-          kyc_status: "unverified",
-          is_verified: false,
-          loading: false,
-        });
-      }
-    })();
-  }, []);
-
-  return status;
-}
+import { useAuth } from "./auth-context.jsx";
 
 /* ---------- Blurred / approximate map placeholder ---------- */
 function ApproximateMap({ city, state }) {
@@ -121,7 +71,7 @@ function ExactMap({ lat, lng }) {
 
 /* ---------- Property Detail Page ---------- */
 export default function PropertyDetailPage({ property, onBack, onReserve, onVerify }) {
-  const { kyc_status, is_verified, loading } = useKycStatus();
+  const { user, loading } = useAuth();
   const [activeImg, setActiveImg] = useState(0);
 
   if (!property) {
@@ -142,7 +92,8 @@ export default function PropertyDetailPage({ property, onBack, onReserve, onVeri
   }
 
   const images = property.images?.length ? property.images : property.image ? [property.image] : [];
-  const gated = !is_verified || kyc_status !== "approved";
+  const kycStatus = user?.kyc_status || "unverified";
+  const gated = kycStatus !== "approved";
 
   // Parse location into city, state (format: "City, State")
   const parts = (property.location || "").split(",").map((s) => s.trim());

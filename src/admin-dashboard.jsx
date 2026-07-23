@@ -146,6 +146,13 @@ function KycQueueTab() {
   }, [fetchItems]);
 
   async function approve(id) {
+    const { data: submission, error: fetchErr } = await supabase
+      .from("landlord_kyc_submissions")
+      .select("user_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (fetchErr) console.error(fetchErr);
+
     const { error } = await supabase
       .from("landlord_kyc_submissions")
       .update({ status: "approved", reviewed_at: new Date().toISOString() })
@@ -154,12 +161,28 @@ function KycQueueTab() {
       alert("Failed to approve: " + error.message);
       return;
     }
+
+    if (submission?.user_id) {
+      const { error: userErr } = await supabase
+        .from("users")
+        .update({ kyc_status: "approved", is_verified: true })
+        .eq("id", submission.user_id);
+      if (userErr) console.error(userErr);
+    }
+
     setItems((prev) =>
       prev.map((i) => (i.id === id ? { ...i, status: "approved" } : i))
     );
   }
 
   async function reject(id) {
+    const { data: submission, error: fetchErr } = await supabase
+      .from("landlord_kyc_submissions")
+      .select("user_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (fetchErr) console.error(fetchErr);
+
     const { error } = await supabase
       .from("landlord_kyc_submissions")
       .update({ status: "rejected", reviewed_at: new Date().toISOString() })
@@ -168,6 +191,15 @@ function KycQueueTab() {
       alert("Failed to reject: " + error.message);
       return;
     }
+
+    if (submission?.user_id) {
+      const { error: userErr } = await supabase
+        .from("users")
+        .update({ kyc_status: "rejected", is_verified: false })
+        .eq("id", submission.user_id);
+      if (userErr) console.error(userErr);
+    }
+
     setItems((prev) =>
       prev.map((i) => (i.id === id ? { ...i, status: "rejected" } : i))
     );

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Button, Input, Label, Badge, cn } from "./components.jsx";
 import { supabase, KYC_BUCKET } from "./lib/supabase.js";
+import { useAuth } from "./auth-context.jsx";
 
 /* ---------- Reusable document upload tile ---------- */
 function DocumentUpload({ label, value, onChange, hint, accept = "image/*,application/pdf" }) {
@@ -118,6 +119,7 @@ async function uploadFile(file, bucket, folder) {
 
 /* ---------- KYC Page ---------- */
 export default function KycPage({ onBack }) {
+  const { ensureUser, setKycPending } = useAuth();
   const [idType, setIdType] = useState("NIN");
   const [idNumber, setIdNumber] = useState("");
   const [idPhoto, setIdPhoto] = useState(null);
@@ -141,6 +143,9 @@ export default function KycPage({ onBack }) {
 
     setSubmitting(true);
     try {
+      const userId = await ensureUser();
+      if (!userId) throw new Error("Could not create or retrieve user session.");
+
       const folder = `kyc-${Date.now()}`;
       const [idPhotoUrl, selfieUrl] = await Promise.all([
         uploadFile(idPhoto.file, KYC_BUCKET, folder),
@@ -150,16 +155,19 @@ export default function KycPage({ onBack }) {
       const { error: insertError } = await supabase
         .from("landlord_kyc_submissions")
         .insert({
+          user_id: userId,
+          full_name: fullNameOnId.trim(),
           id_type: idType,
           id_number: idNumber.trim(),
           id_photo_url: idPhotoUrl,
           selfie_with_id_url: selfieUrl,
           full_name_on_id: fullNameOnId.trim(),
-          full_name: fullNameOnId.trim(),
           status: "pending",
         });
 
       if (insertError) throw insertError;
+
+      await setKycPending();
       setSubmitted(true);
     } catch (err) {
       setError(
