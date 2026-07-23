@@ -15,7 +15,7 @@ import AdminDashboard from "./src/admin-dashboard.jsx";
 import EscrowPage from "./src/escrow-page.jsx";
 import ListPropertyPage from "./src/list-property-page.jsx";
 import PropertyDetailPage from "./src/property-detail-page.jsx";
-import { AuthProvider } from "./src/auth-context.jsx";
+import { AuthProvider, useAuth } from "./src/auth-context.jsx";
 import { properties as seedProperties } from "./src/data.js";
 
 const STORAGE_KEY = "directnest:user_properties:v1";
@@ -46,6 +46,8 @@ function useHashRoute() {
 }
 
 function App() {
+  const { user } = useAuth();
+  const isVerified = user?.kyc_status === "approved";
   const [userProperties, setUserProperties] = useState(loadUserProperties);
   const [modalOpen, setModalOpen] = useState(false);
   const [filters, setFilters] = useState({ location: "", maxPrice: "" });
@@ -248,6 +250,7 @@ function App() {
           isFiltered={isFiltered}
           onClearFilters={handleClearFilters}
           onReserve={handleReserve}
+          isVerified={isVerified}
         />
       </main>
       <SiteFooter />

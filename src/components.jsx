@@ -238,10 +238,14 @@ const verificationBadges = [
   { label: "Verify Location", icon: MapPin },
 ];
 
-function PropertyCard({ property, onReserve }) {
-  const waNumber = (property.whatsapp || "").replace(/[^\d]/g, "");
-  const waHref = waNumber ? `https://wa.me/${waNumber}` : null;
+function PropertyCard({ property, onReserve, isVerified }) {
   const detailHref = `#/property/${property.id}`;
+
+  // Gating: only show Area (city, state) to unverified users
+  const parts = (property.location || "").split(",").map((s) => s.trim());
+  const city = parts[0] || "Area";
+  const state = parts[1] || "Lagos";
+  const displayLocation = isVerified ? property.location : `Area: ${city}, ${state}`;
 
   return (
     <article className="overflow-hidden rounded-xl border border-border bg-card shadow-sm transition hover:shadow-md">
@@ -282,7 +286,7 @@ function PropertyCard({ property, onReserve }) {
         )}
         <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
           <MapPin className="size-3.5" />
-          {property.location}
+          {displayLocation}
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
           {verificationBadges.map(({ label, icon: Icon }) => (
@@ -319,20 +323,22 @@ function PropertyCard({ property, onReserve }) {
             <MessageCircle className="size-4" />
             View Details
           </a>
-          <button
-            onClick={() => onReserve?.(property)}
-            className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-primary bg-primary/5 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/10"
-          >
-            <Bookmark className="size-4" />
-            Reserve
-          </button>
+          {isVerified && (
+            <button
+              onClick={() => onReserve?.(property)}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-primary bg-primary/5 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/10"
+            >
+              <Bookmark className="size-4" />
+              Reserve
+            </button>
+          )}
         </div>
       </div>
     </article>
   );
 }
 
-export function PropertyGrid({ properties, onClearFilters, isFiltered, onReserve }) {
+export function PropertyGrid({ properties, onClearFilters, isFiltered, onReserve, isVerified }) {
   return (
     <section id="listings" className="mx-auto max-w-6xl px-4 py-10">
       <div className="mb-6 flex items-end justify-between">
@@ -362,7 +368,7 @@ export function PropertyGrid({ properties, onClearFilters, isFiltered, onReserve
       ) : (
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {properties.map((p) => (
-            <PropertyCard key={p.id} property={p} onReserve={onReserve} />
+            <PropertyCard key={p.id} property={p} onReserve={onReserve} isVerified={isVerified} />
           ))}
         </div>
       )}
