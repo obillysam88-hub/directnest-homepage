@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   ArrowLeft,
   Bed,
@@ -15,9 +15,13 @@ import {
   Mail,
   CircleAlert as AlertCircle,
   Loader as Loader2,
+  CalendarCheck,
+  Clock,
+  CircleCheck as CheckCircle2,
 } from "lucide-react";
 import { Button, Badge, cn } from "./components.jsx";
 import { useAuth } from "./auth-context.jsx";
+import { supabase } from "./lib/supabase.js";
 
 /* ---------- Blurred / approximate map placeholder ---------- */
 function ApproximateMap({ city, state }) {
@@ -73,6 +77,54 @@ function ExactMap({ lat, lng }) {
 export default function PropertyDetailPage({ property, onBack, onReserve, onVerify }) {
   const { user, loading } = useAuth();
   const [activeImg, setActiveImg] = useState(0);
+  const [inspection, setInspection] = useState(null);
+  const [bookingInspection, setBookingInspection] = useState(false);
+
+  const kycStatus = user?.kyc_status || "unverified";
+  const isVerified = kycStatus === "approved";
+  const gated = !isVerified;
+
+  // Load inspection status for this property
+  const loadInspection = useCallback(async () => {
+    if (!user?.id || !property?.id) return;
+    const { data } = await supabase
+      .from("inspections")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("property_id", property.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    setInspection(data);
+  }, [user?.id, property?.id]);
+
+  useEffect(() => {
+    loadInspection();
+  }, [loadInspection]);
+
+  async function handleBookInspection() {
+    if (!user?.id) return;
+    setBookingInspection(true);
+    try {
+      const { data, error } = await supabase
+        .from("inspections")
+        .insert({
+          user_id: user.id,
+          property_id: property.id,
+          status: "pending",
+          fee_confirmed_by_owner: false,
+        })
+        .select("*")
+        .single();
+      if (!error && data) {
+        setInspection(data);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setBookingInspection(false);
+    }
+  }
 
   if (!property) {
     return (
@@ -92,13 +144,16 @@ export default function PropertyDetailPage({ property, onBack, onReserve, onVeri
   }
 
   const images = property.images?.length ? property.images : property.image ? [property.image] : [];
-  const kycStatus = user?.kyc_status || "unverified";
-  const gated = kycStatus !== "approved";
 
   // Parse location into city, state (format: "City, State")
   const parts = (property.location || "").split(",").map((s) => s.trim());
   const city = parts[0] || "Area";
   const state = parts[1] || "Lagos";
+
+  // Owner contact is only shown when inspection fee is confirmed
+  const inspectionFeeConfirmed = inspection?.fee_confirmed_by_owner === true;
+  const showOwnerContact = isVerified && inspectionFeeConfirmed;
+  const hasInspection = inspection !== null;
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
@@ -154,6 +209,11 @@ export default function PropertyDetailPage({ property, onBack, onReserve, onVeri
               <Fingerprint className="size-3.5" /> Property Fingerprint ID: #{property.fingerprintId}
             </p>
           )}
+          {isVerified && user?.badge && (
+            <Badge className="mt-1 bg-green-50 text-green-700 ring-1 ring-green-200">
+              <ShieldCheck className="size-3.5" /> {user.badge}
+            </Badge>
+          )}
         </div>
         <span className="text-2xl font-bold text-primary">{property.price}</span>
       </div>
@@ -207,7 +267,9 @@ export default function PropertyDetailPage({ property, onBack, onReserve, onVeri
         <h2 className="mb-3 flex items-center gap-2 text-base font-semibold">
           <ShieldCheck className="size-4 text-primary" /> Owner Details
         </h2>
+
         {gated ? (
+          /* ---- UNVERIFIED: Show verify banner ---- */
           <div className="space-y-3">
             <div className="flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 p-4">
               <AlertCircle className="size-5 shrink-0 text-primary" />
@@ -225,11 +287,61 @@ export default function PropertyDetailPage({ property, onBack, onReserve, onVeri
               <ShieldCheck className="size-4" /> Verify with NIN to Unlock
             </Button>
           </div>
+        ) : !hasInspection ? (
+          /* ---- VERIFIED but no inspection booked yet ---- */
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 p-4">
+              <CalendarCheck className="size-5 shrink-0 text-primary" />
+              <p className="text-sm text-muted-foreground">
+                <span className="font-semibold text-foreground">
+                  Book an inspection to unlock owner contact.
+                </span>{" "}
+                Owner details (name, phone, email) are revealed after the owner
+                confirms your inspection fee.
+              </p>
+            </div>
+            <Button
+              onClick={handleBookInspection}
+              disabled={bookingInspection}
+              className="w-full bg-green-600 text-white hover:bg-green-700 sm:w-auto"
+            >
+              {bookingInspection ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" /> Booking…
+                </>
+              ) : (
+                <>
+                  <CalendarCheck className="size-4" /> Book Inspection
+                </>
+              )}
+            </Button>
+          </div>
+        ) : !inspectionFeeConfirmed ? (
+          /* ---- INSPECTION BOOKED but fee not confirmed yet ---- */
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <Clock className="size-5 shrink-0 text-amber-600" />
+              <p className="text-sm text-muted-foreground">
+                <span className="font-semibold text-foreground">
+                  Inspection booked — awaiting fee confirmation.
+                </span>{" "}
+                Owner contact details will appear here once the owner confirms
+                your inspection fee has been received.
+              </p>
+            </div>
+            <Badge className="bg-amber-50 text-amber-700 ring-1 ring-amber-200">
+              <Clock className="size-3.5" /> Inspection Pending
+            </Badge>
+          </div>
         ) : (
+          /* ---- INSPECTION CONFIRMED: Show owner contact ---- */
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <Badge className="bg-green-50 text-green-700 ring-1 ring-green-200">
-                <BadgeCheck className="size-3.5" /> Verified Buyer/Renter
+                <CheckCircle2 className="size-3.5" /> Inspection Fee Confirmed
+              </Badge>
+              <Badge className="bg-green-50 text-green-700 ring-1 ring-green-200">
+                <BadgeCheck className="size-3.5" /> Verified Renter
               </Badge>
             </div>
             <div className="grid gap-2 text-sm sm:grid-cols-2">
