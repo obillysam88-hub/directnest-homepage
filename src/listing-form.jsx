@@ -167,6 +167,7 @@ function loadGooglePlacesScript(apiKey) {
     const script = document.createElement("script");
     script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&v=weekly`;
     script.async = true;
+    script.defer = true;
     script.onload = () => resolve();
     script.onerror = () => {
       placesScriptLoading = null;
@@ -179,151 +180,69 @@ function loadGooglePlacesScript(apiKey) {
 
 export function AddressAutocomplete({ value, onChange, onPlaceSelect }) {
   const inputRef = useRef(null);
-  const [suggestions, setSuggestions] = useState([]);
-  const [activeIndex, setActiveIndex] = useState(-1);
-  const [loading, setLoading] = useState(false);
-  const [scriptReady, setScriptReady] = useState(
-    () => Boolean(window.google?.maps?.places)
-  );
-  const [scriptError, setScriptError] = useState(null);
+  const autocompleteRef = useRef(null);
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 
   useEffect(() => {
-    if (!apiKey || scriptReady) return;
+    if (!apiKey || !inputRef.current) return;
     let cancelled = false;
+
     loadGooglePlacesScript(apiKey)
       .then(() => {
-        if (!cancelled) setScriptReady(true);
+        if (cancelled || !inputRef.current) return;
+        autocompleteRef.current =
+          new window.google.maps.places.Autocomplete(inputRef.current, {
+            types: ["address"],
+            componentRestrictions: { country: "ng" },
+          });
+
+        const listener =
+          window.google.maps.event.addListener(
+            autocompleteRef.current,
+            "place_changed",
+            () => {
+              const place = autocompleteRef.current.getPlace();
+              if (!place || !place.geometry) return;
+              onChange(place.formatted_address || place.name || "");
+              if (onPlaceSelect) {
+                onPlaceSelect({
+                  lat: place.geometry.location.lat(),
+                  lng: place.geometry.location.lng(),
+                  address: place.formatted_address || place.name || "",
+                });
+              }
+            }
+          );
+
+        return () => {
+          if (autocompleteRef.current && listener) {
+            window.google.maps.event.removeListener(listener);
+          }
+        };
       })
-      .catch((err) => {
-        if (!cancelled) setScriptError(err.message);
-      });
+      .catch(() => {});
+
     return () => {
       cancelled = true;
     };
-  }, [apiKey, scriptReady]);
-
-  useEffect(() => {
-    if (!apiKey || !scriptReady || !value || value.length < 3) {
-      setSuggestions([]);
-      return;
-    }
-    setLoading(true);
-    const t = setTimeout(() => {
-      try {
-        if (window.google?.maps?.places) {
-          const service =
-            new window.google.maps.places.AutocompleteService();
-          service.getPlacePredictions(
-            { input: value, componentRestrictions: { country: "ng" } },
-            (preds, status) => {
-              setLoading(false);
-              if (
-                status !== window.google.maps.places.PlacesServiceStatus.OK ||
-                !preds
-              ) {
-                setSuggestions([]);
-                return;
-              }
-              setSuggestions(preds.slice(0, 6));
-              setActiveIndex(-1);
-            }
-          );
-        } else {
-          setLoading(false);
-          setSuggestions([]);
-        }
-      } catch {
-        setLoading(false);
-        setSuggestions([]);
-      }
-    }, 300);
-    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, apiKey, scriptReady]);
-
-  function selectPlace(pred) {
-    onChange(pred.description);
-    setSuggestions([]);
-    if (!onPlaceSelect) return;
-    if (window.google?.maps?.places) {
-      const geocoder = new window.google.maps.Geocoder();
-      geocoder.geocode({ placeId: pred.place_id }, (results, status) => {
-        if (status === window.google.maps.GeocoderStatus.OK && results[0]) {
-          const loc = results[0].geometry.location;
-          onPlaceSelect({
-            lat: loc.lat(),
-            lng: loc.lng(),
-            address: pred.description,
-          });
-        }
-      });
-    }
-  }
-
-  function handleKey(e) {
-    if (!suggestions.length) return;
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setActiveIndex((i) => Math.min(i + 1, suggestions.length - 1));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setActiveIndex((i) => Math.max(i - 1, 0));
-    } else if (e.key === "Enter" && activeIndex >= 0) {
-      e.preventDefault();
-      selectPlace(suggestions[activeIndex]);
-    } else if (e.key === "Escape") {
-      setSuggestions([]);
-    }
-  }
+  }, [apiKey]);
 
   return (
     <div className="space-y-2">
       <Label>Property address</Label>
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          ref={inputRef}
-          type="text"
-          placeholder="Start typing an address in Nigeria"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={handleKey}
-          className="pl-9"
-          autoComplete="off"
-        />
-        {loading && (
-          <Loader2 className="absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-        )}
-        {suggestions.length > 0 && (
-          <ul className="absolute z-20 mt-1 max-h-60 w-full overflow-auto rounded-md border border-border bg-card py-1 shadow-lg">
-            {suggestions.map((s, i) => (
-              <li
-                key={s.place_id}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  selectPlace(s);
-                }}
-                className={cn(
-                  "flex cursor-pointer items-center gap-2 px-3 py-2 text-sm",
-                  i === activeIndex ? "bg-secondary" : "hover:bg-secondary"
-                )}
-              >
-                <MapPin className="size-3.5 shrink-0 text-muted-foreground" />
-                {s.description}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      <input
+        ref={inputRef}
+        type="text"
+        placeholder="Property address"
+        defaultValue={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-10 w-full rounded-md border border-border bg-card px-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+        autoComplete="off"
+      />
       {!apiKey && (
         <p className="text-xs text-amber-600">
           Set VITE_GOOGLE_MAPS_API_KEY in .env to enable Google Places autocomplete.
-        </p>
-      )}
-      {apiKey && scriptError && (
-        <p className="text-xs text-red-600">
-          Could not load Google Maps. Check your network and API key.
         </p>
       )}
     </div>
