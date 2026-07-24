@@ -85,6 +85,19 @@ export function MapPicker({ value, onChange }) {
     onChange({ lat, lng });
   }
 
+  // When coords change externally (e.g. from address autocomplete), move the map + marker.
+  useEffect(() => {
+    if (!mapInstance.current || !markerRef.current) return;
+    if (value?.lat == null || value?.lng == null) return;
+    const pos = { lat: value.lat, lng: value.lng };
+    mapInstance.current.setCenter(pos);
+    mapInstance.current.setZoom(15);
+    markerRef.current.setPosition(pos);
+    setManualLat(value.lat.toFixed(6));
+    setManualLng(value.lng.toFixed(6));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value?.lat, value?.lng]);
+
   function handleManualSubmit(e) {
     e.preventDefault();
     const lat = parseFloat(manualLat);
