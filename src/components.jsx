@@ -17,6 +17,7 @@ import {
   User as UserIcon,
 } from "lucide-react";
 import { supabase } from "./lib/supabase.js";
+import { NIGERIAN_STATES } from "./data.js";
 
 export function cn(...classes) {
   return classes.filter(Boolean).join(" ");
@@ -272,12 +273,12 @@ export function SiteHeader({ onAddProperty, isVerified }) {
 }
 
 export function HeroSection({ onSearch }) {
-  const [location, setLocation] = useState("");
+  const [state, setState] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSearch({ location: location.trim(), maxPrice: maxPrice.trim() });
+    onSearch({ location: state.trim(), maxPrice: maxPrice.trim() });
   };
 
   return (
@@ -300,14 +301,17 @@ export function HeroSection({ onSearch }) {
             className="mx-auto mt-8 flex w-full max-w-xl flex-col gap-2 rounded-2xl border border-border bg-card p-2 shadow-sm sm:flex-row"
           >
             <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Search location e.g. Lekki"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                className="h-12 border-0 bg-transparent pl-10 text-base shadow-none focus-visible:ring-0"
-              />
+              <MapPin className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
+              <select
+                value={state}
+                onChange={(e) => setState(e.target.value)}
+                className="h-12 w-full appearance-none rounded-md border-0 bg-transparent pl-10 pr-8 text-base text-foreground shadow-none focus:outline-none focus:ring-0"
+              >
+                <option value="">Select State</option>
+                {NIGERIAN_STATES.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
             </div>
             <Input
               type="number"
@@ -323,7 +327,7 @@ export function HeroSection({ onSearch }) {
             </Button>
           </form>
           <p className="mt-3 text-sm text-muted-foreground">
-            Popular: Lekki, Ikeja, Victoria Island, Ajah, Ikoyi
+            Browse listings across all 36 Nigerian states plus FCT Abuja.
           </p>
         </div>
       </div>
@@ -395,15 +399,19 @@ function PropertyCard({ property, onReserve, isVerified }) {
   const state = parts[1] || "Lagos";
   const displayLocation = isVerified ? property.location : `Area: ${city}, ${state}`;
 
+  const whatsappHref = property.whatsapp
+    ? `https://wa.me/${(property.whatsapp || "").replace(/[^\d]/g, "")}`
+    : null;
+
   return (
-    <article className="overflow-hidden rounded-xl border border-border bg-card shadow-sm transition hover:shadow-md">
+    <article className="group flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm transition hover:shadow-md">
       <a href={detailHref} className="block">
         <div className="relative aspect-[4/3] overflow-hidden bg-secondary">
           {property.image ? (
             <img
               src={property.image}
               alt={property.title}
-              className="size-full object-cover"
+              className="size-full object-cover transition duration-300 group-hover:scale-105"
               loading="lazy"
             />
           ) : (
@@ -417,11 +425,16 @@ function PropertyCard({ property, onReserve, isVerified }) {
               Verified
             </Badge>
           )}
+          {property.type && (
+            <Badge className="absolute right-3 top-3 bg-white/90 text-foreground ring-1 ring-border">
+              {property.type}
+            </Badge>
+          )}
         </div>
       </a>
-      <div className="p-4">
-        <div className="flex items-center justify-between gap-2">
-          <a href={detailHref} className="font-semibold hover:text-primary">
+      <div className="flex flex-1 flex-col p-4">
+        <div className="flex items-start justify-between gap-2">
+          <a href={detailHref} className="font-semibold leading-snug hover:text-primary">
             {property.title}
           </a>
           <span className="shrink-0 text-sm font-bold text-primary">{property.price}</span>
@@ -436,17 +449,6 @@ function PropertyCard({ property, onReserve, isVerified }) {
           <MapPin className="size-3.5" />
           {displayLocation}
         </p>
-        <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          {verificationBadges.map(({ label, icon: Icon }) => (
-            <Badge
-              key={label}
-              className="bg-green-50 text-green-700 ring-1 ring-green-200"
-            >
-              <Icon className="size-3.5" />
-              {label}
-            </Badge>
-          ))}
-        </div>
         <div className="mt-3 flex items-center gap-4 text-sm text-muted-foreground">
           <span className="flex items-center gap-1">
             <Bed className="size-4" /> {property.beds}
@@ -463,23 +465,24 @@ function PropertyCard({ property, onReserve, isVerified }) {
             {property.description}
           </p>
         )}
-        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+        <div className="mt-auto pt-4 flex flex-col gap-2 sm:flex-row">
+          {whatsappHref && (
+            <a
+              href={whatsappHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700"
+            >
+              <MessageCircle className="size-4" />
+              Contact Agent
+            </a>
+          )}
           <a
             href={detailHref}
-            className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700"
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground transition hover:bg-secondary"
           >
-            <MessageCircle className="size-4" />
             View Details
           </a>
-          {isVerified && (
-            <button
-              onClick={() => onReserve?.(property)}
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-primary bg-primary/5 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/10"
-            >
-              <Bookmark className="size-4" />
-              Reserve
-            </button>
-          )}
         </div>
       </div>
     </article>
@@ -492,10 +495,10 @@ export function PropertyGrid({ properties, onClearFilters, isFiltered, onReserve
       <div className="mb-6 flex items-end justify-between">
         <div>
           <h2 className="text-2xl font-bold">
-            {isFiltered ? "Search results" : "Featured listings"}
+            {isFiltered ? "Search results" : "Featured Properties"}
           </h2>
           <p className="text-sm text-muted-foreground">
-            {properties.length} {properties.length === 1 ? "property" : "properties"} direct from verified owners across Lagos.
+            {properties.length} {properties.length === 1 ? "property" : "properties"} direct from verified owners across Nigeria.
           </p>
         </div>
         {isFiltered && (

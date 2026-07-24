@@ -83,7 +83,9 @@ function App() {
     const max = parsePrice(filters.maxPrice);
     if (!loc && max == null) return allProperties;
     return allProperties.filter((p) => {
-      const matchesLoc = !loc || (p.location || "").toLowerCase().includes(loc);
+      const pState = (p.state || "").toLowerCase();
+      const pLoc = (p.location || "").toLowerCase();
+      const matchesLoc = !loc || pState === loc || pLoc.includes(loc);
       const priceNum = parsePrice(p.price);
       const matchesPrice = max == null || priceNum == null || priceNum <= max;
       return matchesLoc && matchesPrice;
