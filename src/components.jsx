@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, forwardRef } from "react";
 import {
   ShieldCheck,
   Bed,
@@ -44,9 +44,10 @@ export function Button({ children, className, variant = "default", ...props }) {
   );
 }
 
-export function Input({ className, ...props }) {
+export const Input = forwardRef(function Input({ className, ...props }, ref) {
   return (
     <input
+      ref={ref}
       className={cn(
         "h-10 w-full rounded-md border border-border bg-card px-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/40",
         className
@@ -54,7 +55,7 @@ export function Input({ className, ...props }) {
       {...props}
     />
   );
-}
+});
 
 export function Textarea({ className, ...props }) {
   return (
