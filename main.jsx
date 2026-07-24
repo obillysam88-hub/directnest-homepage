@@ -267,6 +267,8 @@ function App() {
           onClearFilters={handleClearFilters}
           onReserve={handleReserve}
           isVerified={isVerified}
+          selectedState={filters.location}
+          onAddProperty={goListProperty}
         />
       </main>
       <SiteFooter />

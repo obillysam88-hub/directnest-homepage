@@ -161,7 +161,7 @@ export default function PropertyDetailPage({ property, onBack, onReserve, onVeri
         onClick={onBack}
         className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="size-4" /> Back to listings
+        <ArrowLeft className="size-4" /> Back to Home
       </button>
 
       {/* Image gallery */}

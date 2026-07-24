@@ -15,6 +15,7 @@ import {
   Bookmark,
   LogOut,
   User as UserIcon,
+  ArrowLeft,
 } from "lucide-react";
 import { supabase } from "./lib/supabase.js";
 import { NIGERIAN_STATES } from "./data.js";
@@ -218,6 +219,7 @@ export function SiteHeader({ onAddProperty, isVerified }) {
           <span className="text-lg font-extrabold tracking-tight">Directnest</span>
         </a>
         <nav className="hidden items-center gap-6 text-sm font-medium text-muted-foreground md:flex">
+          <a href="#/" className="hover:text-foreground">Home</a>
           <a href="#listings" className="hover:text-foreground">Browse</a>
           <a href="#why" className="hover:text-foreground">Why Directnest</a>
           <a href="#/kyc" className="hover:text-foreground">KYC</a>
@@ -474,7 +476,7 @@ function PropertyCard({ property, onReserve, isVerified }) {
               className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700"
             >
               <MessageCircle className="size-4" />
-              Contact Agent
+              Contact Owner
             </a>
           )}
           <a
@@ -489,9 +491,17 @@ function PropertyCard({ property, onReserve, isVerified }) {
   );
 }
 
-export function PropertyGrid({ properties, onClearFilters, isFiltered, onReserve, isVerified }) {
+export function PropertyGrid({ properties, onClearFilters, isFiltered, onReserve, isVerified, selectedState, onAddProperty }) {
   return (
     <section id="listings" className="mx-auto max-w-6xl px-4 py-10">
+      {isFiltered && (
+        <button
+          onClick={onClearFilters}
+          className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"
+        >
+          <ArrowLeft className="size-4" /> Back to Home
+        </button>
+      )}
       <div className="mb-6 flex items-end justify-between">
         <div>
           <h2 className="text-2xl font-bold">
@@ -512,9 +522,15 @@ export function PropertyGrid({ properties, onClearFilters, isFiltered, onReserve
       </div>
       {properties.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-card p-10 text-center">
-          <p className="text-sm text-muted-foreground">
-            No properties match your search. Try a different location or higher price.
+          <p className="text-base font-medium text-foreground">
+            No properties in {selectedState || "this area"} yet. Be the first to list!
           </p>
+          <Button
+            onClick={onAddProperty}
+            className="mt-4 bg-green-600 text-white hover:bg-green-700"
+          >
+            List Property
+          </Button>
         </div>
       ) : (
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -546,6 +562,7 @@ export function SiteFooter() {
           <p className="font-semibold">Explore</p>
           <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
             <li><a href="#listings" className="hover:text-foreground">Browse listings</a></li>
+            <li><a href="#/" className="hover:text-foreground">Home</a></li>
             <li><a href="#why" className="hover:text-foreground">Why Directnest</a></li>
             <li><a href="#/kyc" className="hover:text-foreground">KYC Verification</a></li>
             <li><a href="#contact" className="hover:text-foreground">Contact</a></li>
