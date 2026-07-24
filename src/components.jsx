@@ -105,6 +105,84 @@ export function Select({ className, children, ...props }) {
   );
 }
 
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+export function DobSelect({ value, onChange, idPrefix = "dob" }) {
+  const parts = (value || "").split("-"); // YYYY-MM-DD
+  const year = parts[0] || "";
+  const month = parts[1] || "";
+  const day = parts[2] || "";
+
+  const currentYear = new Date().getFullYear();
+  const years = [];
+  for (let y = currentYear; y >= 1920; y--) years.push(String(y));
+
+  const daysInMonth = month
+    ? new Date(Number(year), Number(month), 0).getDate()
+    : 31;
+  const days = [];
+  for (let d = 1; d <= daysInMonth; d++) days.push(String(d).padStart(2, "0"));
+
+  function update(field, val) {
+    const y = field === "year" ? val : year;
+    const m = field === "month" ? val : month;
+    let d = field === "day" ? val : day;
+    if (y && m) {
+      const max = new Date(Number(y), Number(m), 0).getDate();
+      if (Number(d) > max) d = String(max).padStart(2, "0");
+    }
+    const formatted = y && m && d ? `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}` : "";
+    onChange(formatted);
+  }
+
+  const selectClass =
+    "h-10 w-full rounded-md border border-border bg-card px-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/40";
+
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      <div>
+        <label htmlFor={`${idPrefix}-day`} className="mb-1 block text-xs font-medium text-muted-foreground">Day</label>
+        <select
+          id={`${idPrefix}-day`}
+          value={day}
+          onChange={(e) => update("day", e.target.value)}
+          className={selectClass}
+        >
+          <option value="">Day</option>
+          {days.map((d) => <option key={d} value={d}>{d}</option>)}
+        </select>
+      </div>
+      <div>
+        <label htmlFor={`${idPrefix}-month`} className="mb-1 block text-xs font-medium text-muted-foreground">Month</label>
+        <select
+          id={`${idPrefix}-month`}
+          value={month}
+          onChange={(e) => update("month", e.target.value)}
+          className={selectClass}
+        >
+          <option value="">Month</option>
+          {MONTHS.map((m, i) => <option key={m} value={String(i + 1).padStart(2, "0")}>{m}</option>)}
+        </select>
+      </div>
+      <div>
+        <label htmlFor={`${idPrefix}-year`} className="mb-1 block text-xs font-medium text-muted-foreground">Year</label>
+        <select
+          id={`${idPrefix}-year`}
+          value={year}
+          onChange={(e) => update("year", e.target.value)}
+          className={selectClass}
+        >
+          <option value="">Year</option>
+          {years.map((y) => <option key={y} value={y}>{y}</option>)}
+        </select>
+      </div>
+    </div>
+  );
+}
+
 export function SiteHeader({ onAddProperty, isVerified }) {
   const [authUser, setAuthUser] = useState(null);
   const [loggingOut, setLoggingOut] = useState(false);

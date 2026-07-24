@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Chrome as Home, Loader as Loader2, Mail, Lock, User as UserIcon } from "lucide-react";
+import { Chrome as Home, Loader as Loader2, Mail, Lock, User as UserIcon, KeyRound } from "lucide-react";
 import { supabase } from "./lib/supabase.js";
 import { Button } from "./components.jsx";
 
@@ -10,11 +10,45 @@ export default function LoginPage({ onBack }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
+  const [toast, setToast] = useState("");
+  const [resetSending, setResetSending] = useState(false);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.hash.split("?")[1] || "");
-    if (params.get("mode") === "signup") setMode("signup");
+    const syncMode = () => {
+      const params = new URLSearchParams(window.location.hash.split("?")[1] || "");
+      setMode(params.get("mode") === "signup" ? "signup" : "login");
+      setError("");
+      setInfo("");
+    };
+    syncMode();
+    window.addEventListener("hashchange", syncMode);
+    return () => window.removeEventListener("hashchange", syncMode);
   }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const id = setTimeout(() => setToast(""), 3500);
+    return () => clearTimeout(id);
+  }, [toast]);
+
+  const handleForgotPassword = async () => {
+    setError("");
+    setInfo("");
+    if (!email.trim()) {
+      setError("Enter your email above first, then tap Forgot Password.");
+      return;
+    }
+    setResetSending(true);
+    try {
+      // Mock reset — in production this would call supabase.auth.resetPasswordForEmail(email.trim())
+      await new Promise((r) => setTimeout(r, 800));
+      setToast("Reset link sent");
+    } catch {
+      setError("Could not send reset link. Please try again.");
+    } finally {
+      setResetSending(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -102,6 +136,23 @@ export default function LoginPage({ onBack }) {
           </div>
         </div>
 
+        {mode === "login" && (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={handleForgotPassword}
+              disabled={resetSending}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-green-700 hover:underline disabled:opacity-50"
+            >
+              {resetSending ? (
+                <><Loader2 className="size-3.5 animate-spin" /> Sending…</>
+              ) : (
+                <><KeyRound className="size-3.5" /> Forgot Password?</>
+              )}
+            </button>
+          </div>
+        )}
+
         {error && (
           <div className="rounded-md bg-red-50 px-3 py-2.5 text-sm text-red-700 ring-1 ring-red-200">
             {error}
@@ -160,6 +211,15 @@ export default function LoginPage({ onBack }) {
       >
         ← Back to home
       </button>
+
+      {toast && (
+        <div className="fixed left-1/2 top-6 z-50 -translate-x-1/2">
+          <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-green-700 shadow-lg">
+            <KeyRound className="size-5 text-green-600" />
+            {toast}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

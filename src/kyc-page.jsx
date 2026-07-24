@@ -20,7 +20,7 @@ import {
   Upload,
   PencilLine,
 } from "lucide-react";
-import { Button, Input, Label, Badge, cn } from "./components.jsx";
+import { Button, Input, Label, Badge, DobSelect, cn } from "./components.jsx";
 import { supabase, KYC_BUCKET } from "./lib/supabase.js";
 import { useAuth } from "./auth-context.jsx";
 
@@ -977,7 +977,7 @@ export default function KycPage({ onBack }) {
                   <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-green-700"><Sparkles className="size-3.5" /> OCR extracted — review and edit if needed</p>
                   <div className="grid gap-2 sm:grid-cols-2">
                     <div><Label htmlFor="ocrName">Full Name</Label><Input id="ocrName" value={ocrData.name} onChange={(e) => setOcrData((p) => ({ ...p, name: e.target.value }))} placeholder="Full name" /></div>
-                    <div><Label htmlFor="ocrDob">Date of Birth</Label><Input id="ocrDob" value={ocrData.dob} onChange={(e) => setOcrData((p) => ({ ...p, dob: e.target.value }))} placeholder="YYYY-MM-DD" /></div>
+                    <div className="sm:col-span-2"><Label htmlFor="ocrDob">Date of Birth</Label><DobSelect idPrefix="ocrDob" value={ocrData.dob} onChange={(val) => setOcrData((p) => ({ ...p, dob: val }))} /></div>
                     <div><Label htmlFor="ocrGender">Gender</Label><Input id="ocrGender" value={ocrData.gender} onChange={(e) => setOcrData((p) => ({ ...p, gender: e.target.value }))} placeholder="Gender" /></div>
                   </div>
                 </div>
@@ -1001,7 +1001,7 @@ export default function KycPage({ onBack }) {
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <div><Label htmlFor="manualName">Full Name *</Label><Input id="manualName" value={ocrData.name} onChange={(e) => setOcrData((p) => ({ ...p, name: e.target.value }))} placeholder="Full name as on NIN" /></div>
-                  <div><Label htmlFor="manualDob">Date of Birth *</Label><Input id="manualDob" type="date" value={ocrData.dob} onChange={(e) => setOcrData((p) => ({ ...p, dob: e.target.value }))} /></div>
+                  <div className="sm:col-span-2"><Label htmlFor="manualDob">Date of Birth *</Label><DobSelect idPrefix="manualDob" value={ocrData.dob} onChange={(val) => setOcrData((p) => ({ ...p, dob: val }))} /></div>
                   <div>
                     <Label htmlFor="manualGender">Gender *</Label>
                     <select id="manualGender" value={ocrData.gender} onChange={(e) => setOcrData((p) => ({ ...p, gender: e.target.value }))} className="h-10 w-full rounded-md border border-border bg-card px-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/40">
