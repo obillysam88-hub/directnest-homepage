@@ -19,6 +19,7 @@ import {
   Crop,
   Upload,
   PencilLine,
+  RotateCcw,
 } from "lucide-react";
 import { Button, Input, Label, Badge, DobSelect, cn } from "./components.jsx";
 import { supabase, KYC_BUCKET } from "./lib/supabase.js";
@@ -371,32 +372,54 @@ function CropFaceTool({ imageUrl, onCrop }) {
 function LivenessCamera({ onComplete }) {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
+  const fileInputRef = useRef(null);
   const [phase, setPhase] = useState("idle");
   const [promptIndex, setPromptIndex] = useState(0);
   const [secondsLeft, setSecondsLeft] = useState(5);
   const [cameraReady, setCameraReady] = useState(false);
   const [error, setError] = useState("");
+  const [permissionDenied, setPermissionDenied] = useState(false);
+
+  async function startCamera() {
+    setError("");
+    setPermissionDenied(false);
+    setPhase("idle");
+    setCameraReady(false);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); }
+      setCameraReady(true);
+    } catch (err) {
+      const name = err?.name || "";
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        setError("Camera permission was denied. Please allow camera access in your browser settings, or upload a selfie photo instead.");
+      } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+        setError("No camera found on this device. You can upload a selfie photo instead.");
+      } else {
+        setError("Could not access camera. You can retry or upload a selfie photo instead.");
+      }
+      setPermissionDenied(true);
+      setPhase("error");
+    }
+  }
 
   useEffect(() => {
-    let cancelled = false;
-    async function start() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
-          audio: false,
-        });
-        if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
-        streamRef.current = stream;
-        if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); }
-        setCameraReady(true);
-      } catch {
-        setError("Could not access camera. Please allow camera permissions.");
-        setPhase("error");
-      }
-    }
-    start();
-    return () => { cancelled = true; if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop()); };
+    startCamera();
+    return () => { if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop()); };
   }, []);
+
+  function handleFileUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    onComplete({ file, url });
+    setPhase("done");
+    e.target.value = "";
+  }
 
   function startRecording() {
     if (!streamRef.current) return;
@@ -463,9 +486,18 @@ function LivenessCamera({ onComplete }) {
           </div>
         )}
         {phase === "error" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-red-600/80 p-4 text-center">
-            <AlertCircle className="size-10 text-white" />
-            <p className="text-sm font-semibold text-white">{error}</p>
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background/95 p-4 text-center">
+            <AlertCircle className="size-10 text-red-600" />
+            <p className="text-sm font-medium text-foreground">{error}</p>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button onClick={startCamera} variant="outline" className="border-red-300 text-red-700 hover:bg-red-50">
+                <RotateCcw className="size-4" /> Retry Camera
+              </Button>
+              <Button onClick={() => fileInputRef.current?.click()} className="bg-green-600 text-white hover:bg-green-700">
+                <Upload className="size-4" /> Upload Selfie
+              </Button>
+            </div>
+            <input ref={fileInputRef} type="file" accept="image/*" capture="user" className="hidden" onChange={handleFileUpload} />
           </div>
         )}
       </div>
@@ -587,6 +619,8 @@ export default function KycPage({ onBack }) {
   const [cooldownInfo, setCooldownInfo] = useState(null);
   const [blacklisted, setBlacklisted] = useState(false);
   const [failedAttempts, setFailedAttempts] = useState(0);
+  const [faceMatchAttempts, setFaceMatchAttempts] = useState(0);
+  const [manualReview, setManualReview] = useState(false);
   const [showTestControls, setShowTestControls] = useState(false);
   const [testMode, setTestMode] = useState(null);
   const [preChecks, setPreChecks] = useState({ blacklist: null, rateLimit: null, loading: false });
@@ -683,7 +717,7 @@ export default function KycPage({ onBack }) {
     console.log("[FaceMatch] nin_face_photo:", { file: ninFacePhoto.file, url: ninFacePhoto.url, size: ninFacePhoto.file.size, type: ninFacePhoto.file.type });
     console.log("[FaceMatch] liveness_selfie:", { file: selfieData.file, url: selfieData.url, size: selfieData.file.size, type: selfieData.file.type });
     try {
-      if (testMode === "fail") { setFaceMatchScore(0.3); setFaceMatchLoading(false); return; }
+      if (testMode === "fail") { setFaceMatchScore(0.3); setFaceMatchAttempts((p) => p + 1); setFaceMatchLoading(false); return; }
       if (testMode === "pass") { setFaceMatchScore(0.85); setFaceMatchLoading(false); return; }
       await ensureModels();
       const idImg = new Image();
@@ -699,16 +733,56 @@ export default function KycPage({ onBack }) {
       if (result.score === null) {
         setError("Face too small or blurry. Please retake with good light.");
         setFaceMatchScore(null);
+        setFaceMatchAttempts((p) => p + 1);
       } else {
         setFaceMatchScore(result.score);
+        if (result.score < 0.7) setFaceMatchAttempts((p) => p + 1);
         if (result.reason) setError(result.reason);
       }
     } catch (err) {
       console.error("[FaceMatch] Error:", err);
       setError("Face detection failed. Please retake both the NIN crop and selfie.");
       setFaceMatchScore(null);
+      setFaceMatchAttempts((p) => p + 1);
     } finally {
       setFaceMatchLoading(false);
+    }
+  }
+
+  async function skipToManualReview() {
+    setError("");
+    setSubmitting(true);
+    try {
+      const userId = await ensureUser();
+      if (!userId) {
+        setError("Please log in to complete verification.");
+        setSubmitting(false);
+        setTimeout(() => { window.location.hash = "#/login"; }, 1500);
+        return;
+      }
+      const ninHash = await hashNin(nin.trim());
+      const folder = `kyc-${userId}-${Date.now()}`;
+      let slipPhotoUrl = null, facePhotoUrl = null, selfieUrl = null;
+      try {
+        slipPhotoUrl = await uploadFile(slipPhoto.file, KYC_BUCKET, folder);
+        facePhotoUrl = await uploadFile(ninFacePhoto.file, KYC_BUCKET, folder);
+        selfieUrl = await uploadFile(selfieData.file, KYC_BUCKET, folder);
+      } catch { /* storage may fail in sandbox */ }
+      await supabase.from("kyc_attempts").insert({
+        user_id: userId, id_type: "NIN", id_number: nin.trim(), nin_hash: ninHash,
+        id_photo_url: slipPhotoUrl, nin_face_photo_url: facePhotoUrl, liveness_frame_url: selfieUrl,
+        face_similarity_score: faceMatchScore ?? 0, liveness_check_passed: false,
+        status: "pending_review", failure_reason: "Face match failed twice — user requested manual review",
+        verification_level: "manual",
+      });
+      await supabase.from("users").update({
+        kyc_status: "pending_review", failed_attempts: failedAttempts,
+      }).eq("id", userId);
+      setManualReview(true);
+    } catch (err) {
+      setError("Submission failed: " + (err.message || "Unknown error."));
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -1050,6 +1124,9 @@ export default function KycPage({ onBack }) {
       {/* Step 3: Liveness + Face Match */}
       {step === 3 && (
         <div className="space-y-6">
+          <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5 text-center">
+            <p className="text-sm font-semibold text-primary">Step 3 of 4: Identity Verification</p>
+          </div>
           <section className="space-y-4 rounded-xl border border-border bg-card p-5">
             <h2 className="flex items-center gap-2 text-base font-semibold"><ScanFace className="size-4 text-primary" /> Liveness + Face Match</h2>
             <p className="text-sm text-muted-foreground">We'll capture a quick selfie following the prompts: <span className="font-medium text-foreground">Blink, Turn Left, Smile</span>. Your selfie will be compared to the cropped face from your NIN slip.</p>
@@ -1098,6 +1175,20 @@ export default function KycPage({ onBack }) {
               </div>
             </div>
           )}
+          {faceMatchAttempts >= 2 && faceMatchScore !== null && faceMatchScore < 0.7 && !faceMatchLoading && (
+            <div className="space-y-3">
+              <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                <AlertCircle className="mt-0.5 size-5 shrink-0 text-amber-600" />
+                <div>
+                  <p className="text-sm font-semibold text-amber-700">Having trouble?</p>
+                  <p className="mt-0.5 text-xs text-amber-600">Ensure good lighting, remove glasses/hat, and face the camera directly.</p>
+                </div>
+              </div>
+              <Button onClick={skipToManualReview} disabled={submitting} variant="outline" className="w-full border-amber-300 text-amber-700 hover:bg-amber-50">
+                {submitting ? <><Loader2 className="size-4 animate-spin" /> Submitting…</> : <><PencilLine className="size-4" /> Skip and submit for manual review</>}
+              </Button>
+            </div>
+          )}
 
           <div className="rounded-lg border border-dashed border-border p-3">
             <button onClick={() => setShowTestControls(!showTestControls)} className="text-xs font-medium text-muted-foreground hover:text-foreground">{showTestControls ? "Hide" : "Show"} Test Controls</button>
@@ -1116,6 +1207,15 @@ export default function KycPage({ onBack }) {
             <Button variant="outline" onClick={() => setStep(2)} className="flex-1 sm:flex-none"><ArrowLeftIcon className="size-4" /> Back</Button>
             <Button onClick={() => { setError(""); if (!selfieData) { setError("Please capture a selfie."); return; } if (faceMatchScore === null) { setError("Please run the face match."); return; } if (faceMatchScore < 0.7) { setError("Faces don't match. Please retake NIN photo and Selfie."); return; } setStep(4); }} disabled={!selfieData || faceMatchScore === null || faceMatchScore < 0.7} className="flex-1 bg-green-600 text-white hover:bg-green-700">Continue <ArrowRight className="size-4" /></Button>
           </div>
+        </div>
+      )}
+
+      {manualReview && (
+        <div className="mx-auto flex max-w-xl flex-col items-center px-4 py-16 text-center">
+          <div className="flex size-16 items-center justify-center rounded-full bg-amber-100 text-amber-600"><Clock className="size-8" /></div>
+          <h1 className="mt-5 text-2xl font-bold">Submitted for Manual Review</h1>
+          <p className="mt-2 text-muted-foreground">Your verification has been flagged for our admin team to review manually. You'll be notified once it's processed. This usually takes 1-2 business days.</p>
+          <Button onClick={onBack} className="mt-6 bg-green-600 text-white hover:bg-green-700">Back to home</Button>
         </div>
       )}
 
