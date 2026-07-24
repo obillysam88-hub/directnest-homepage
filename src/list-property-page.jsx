@@ -36,7 +36,7 @@ const AMENITIES = [
 ];
 
 const MIN_PHOTOS = 5;
-const MAX_PHOTOS = 20;
+const MAX_PHOTOS = 10;
 const MAX_INSPECTION_FEE = 100000;
 
 async function uploadImage(file, folder) {
@@ -87,6 +87,8 @@ export default function ListPropertyPage({ onBack }) {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef(null);
 
   function toggleAmenity(amenity) {
@@ -137,10 +139,15 @@ export default function ListPropertyPage({ onBack }) {
 
     setSubmitting(true);
     try {
+      setUploading(true);
+      setUploadProgress(0);
       const folder = `property-${Date.now()}`;
-      const imageUrls = await Promise.all(
-        images.map((img) => uploadImage(img.file, folder))
-      );
+      const imageUrls = [];
+      for (let i = 0; i < images.length; i++) {
+        const url = await uploadImage(images[i].file, folder);
+        imageUrls.push(url);
+        setUploadProgress(Math.round(((i + 1) / images.length) * 100));
+      }
       const legalDocUrl = await uploadLegalDoc(legalDoc);
       const fingerprintId = `DN-${String(Date.now()).slice(-6)}`;
 
@@ -173,6 +180,7 @@ export default function ListPropertyPage({ onBack }) {
       );
     } finally {
       setSubmitting(false);
+      setUploading(false);
     }
   }
 
@@ -306,7 +314,12 @@ export default function ListPropertyPage({ onBack }) {
                 Required: Front, Living, Kitchen, 2 Bedrooms, Bath
               </p>
             </div>
-            <ImageUploader images={images} setImages={setImages} />
+            <ImageUploader
+              images={images}
+              setImages={setImages}
+              uploading={uploading}
+              uploadProgress={uploadProgress}
+            />
           </section>
 
           {/* Basic info */}

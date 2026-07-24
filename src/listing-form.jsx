@@ -263,13 +263,13 @@ export function AddressAutocomplete({ value, onChange, onPlaceSelect }) {
 }
 
 /* ---------- Image Upload: 5-20 images, drag-drop ---------- */
-export function ImageUploader({ images, setImages }) {
+export function ImageUploader({ images, setImages, uploading, uploadProgress }) {
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState("");
   const inputRef = useRef(null);
 
   const MIN = 5;
-  const MAX = 20;
+  const MAX = 10;
 
   function addFiles(fileList) {
     setError("");
@@ -357,9 +357,22 @@ export function ImageUploader({ images, setImages }) {
         />
       </div>
       {error && <p className="text-xs text-red-600">{error}</p>}
+      {uploading && (
+        <div className="space-y-1">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-300"
+              style={{ width: `${uploadProgress}%` }}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Uploading photos… {uploadProgress}%
+          </p>
+        </div>
+      )}
       {images.length > 0 && (
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
-          {images.map((img) => (
+          {images.map((img, i) => (
             <div
               key={img.id}
               className="group relative aspect-square overflow-hidden rounded-md border border-border"
@@ -369,6 +382,11 @@ export function ImageUploader({ images, setImages }) {
                 alt="preview"
                 className="size-full object-cover"
               />
+              {i === 0 && (
+                <span className="absolute left-1 top-1 rounded bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground shadow">
+                  Cover Photo
+                </span>
+              )}
               <button
                 type="button"
                 onClick={(e) => {

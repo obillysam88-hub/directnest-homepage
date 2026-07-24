@@ -6,4 +6,4 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export const KYC_BUCKET = "kyc-documents";
-export const PROPERTY_BUCKET = "property-images";
+export const PROPERTY_BUCKET = "property-photos";
