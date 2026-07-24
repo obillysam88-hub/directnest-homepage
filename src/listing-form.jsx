@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { MapPin, Search, CloudUpload as UploadCloud, X, Image as ImageIcon, Loader as Loader2, Crosshair, CircleCheck as CheckCircle2 } from "lucide-react";
+import { MapPin, Search, CloudUpload as UploadCloud, X, Image as ImageIcon, Loader as Loader2, Crosshair, CircleCheck as CheckCircle2, Camera, Images, CheckCircle2 as CheckIcon, Star } from "lucide-react";
 import {
   Button,
   Input,
@@ -263,15 +263,77 @@ export function AddressAutocomplete({ value, onChange, onPlaceSelect }) {
 }
 
 /* ---------- Image Upload: 5-20 images, drag-drop ---------- */
-export function ImageUploader({ images, setImages, uploading, uploadProgress }) {
+export function ImageUploader({ images, setImages, userId, tempPropertyId }) {
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState("");
-  const inputRef = useRef(null);
+  const [activeCategory, setActiveCategory] = useState("Front View");
+  const cameraInputRef = useRef(null);
+  const galleryInputRef = useRef(null);
 
-  const MIN = 5;
+  const MIN = 1;
   const MAX = 10;
 
-  function addFiles(fileList) {
+  const CATEGORIES = [
+    "Front View",
+    "Living Room",
+    "Kitchen",
+    "Bedrooms",
+    "Bathrooms",
+    "Toilet",
+    "Other",
+  ];
+
+  function compressImage(file, maxW = 1920) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          let { width, height } = img;
+          if (width > maxW) {
+            height = Math.round((height * maxW) / width);
+            width = maxW;
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, width, height);
+          canvas.toBlob(
+            (blob) => {
+              if (blob) resolve(blob);
+              else reject(new Error("Compression failed"));
+            },
+            "image/jpeg",
+            0.82
+          );
+        };
+        img.onerror = reject;
+        img.src = e.target.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function uploadToSupabase(file, category) {
+    const compressed = await compressImage(file);
+    const safeCat = category.toLowerCase().replace(/\s+/g, "-");
+    const path = `${userId}/${tempPropertyId}/${safeCat}_${Date.now()}.jpg`;
+    const { error } = await supabase.storage
+      .from(PROPERTY_BUCKET)
+      .upload(path, compressed, {
+        upsert: false,
+        contentType: "image/jpeg",
+      });
+    if (error) throw error;
+    const { data: pub } = supabase.storage
+      .from(PROPERTY_BUCKET)
+      .getPublicUrl(path);
+    return { url: pub.publicUrl, path };
+  }
+
+  async function addFiles(fileList, category) {
     setError("");
     const incoming = Array.from(fileList).filter((f) =>
       f.type.startsWith("image/")
@@ -280,31 +342,94 @@ export function ImageUploader({ images, setImages, uploading, uploadProgress }) 
       setError("Please select image files only.");
       return;
     }
-    const next = [...images, ...incoming];
-    if (next.length > MAX) {
+    if (images.length + incoming.length > MAX) {
       setError(`You can upload a maximum of ${MAX} images.`);
       return;
     }
-    const withPreviews = next.map((file) => ({
-      id: `${file.name}-${file.size}-${Math.random().toString(36).slice(2)}`,
-      file,
-      url: URL.createObjectURL(file),
-    }));
-    setImages(withPreviews);
+
+    for (const file of incoming) {
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const previewUrl = URL.createObjectURL(file);
+      const newImg = {
+        id,
+        file,
+        url: previewUrl,
+        category,
+        status: "uploading",
+        progress: 0,
+        storagePath: null,
+      };
+      setImages((prev) => [...prev, newImg]);
+
+      try {
+        // Simulate progress for UX
+        const progressInterval = setInterval(() => {
+          setImages((prev) =>
+            prev.map((p) =>
+              p.id === id && p.progress < 90
+                ? { ...p, progress: p.progress + 10 }
+                : p
+            )
+          );
+        }, 150);
+
+        const result = await uploadToSupabase(file, category);
+
+        clearInterval(progressInterval);
+        setImages((prev) =>
+          prev.map((p) =>
+            p.id === id
+              ? {
+                  ...p,
+                  status: "done",
+                  progress: 100,
+                  url: result.url,
+                  storagePath: result.path,
+                }
+              : p
+          )
+        );
+      } catch (err) {
+        setImages((prev) =>
+          prev.map((p) =>
+            p.id === id ? { ...p, status: "error", progress: 0 } : p
+          )
+        );
+        setError(
+          "Upload failed: " + (err.message || "Unknown error")
+        );
+      }
+    }
   }
 
-  function removeImage(id) {
+  async function removeImage(id) {
+    const img = images.find((p) => p.id === id);
+    if (img?.storagePath) {
+      try {
+        await supabase.storage
+          .from(PROPERTY_BUCKET)
+          .remove([img.storagePath]);
+      } catch {
+        // best-effort delete
+      }
+    }
+    if (img?.url?.startsWith("blob:")) URL.revokeObjectURL(img.url);
+    setImages((prev) => prev.filter((p) => p.id !== id));
+  }
+
+  function setCover(id) {
     setImages((prev) => {
-      const found = prev.find((p) => p.id === id);
-      if (found) URL.revokeObjectURL(found.url);
-      return prev.filter((p) => p.id !== id);
+      const idx = prev.findIndex((p) => p.id === id);
+      if (idx === -1) return prev;
+      const item = prev[idx];
+      return [item, ...prev.filter((p) => p.id !== id)];
     });
   }
 
   function handleDrop(e) {
     e.preventDefault();
     setDragging(false);
-    addFiles(e.dataTransfer.files);
+    addFiles(e.dataTransfer.files, activeCategory);
   }
 
   function handleDragOver(e) {
@@ -318,94 +443,198 @@ export function ImageUploader({ images, setImages, uploading, uploadProgress }) 
   }
 
   return (
-    <div className="space-y-2">
-      <Label>
-        Property photos{" "}
-        <span className="font-normal text-muted-foreground">
-          ({images.length}/{MAX}, minimum {MIN})
-        </span>
-      </Label>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <Label>
+          Property photos{" "}
+          <span className="font-normal text-muted-foreground">
+            ({images.length}/{MAX} uploaded)
+          </span>
+        </Label>
+      </div>
+
+      {/* Drag & drop area */}
       <div
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
-        onClick={() => inputRef.current?.click()}
         className={cn(
-          "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-6 text-center transition",
+          "flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-6 text-center transition",
           dragging
             ? "border-primary bg-primary/5"
-            : "border-border bg-secondary/40 hover:border-primary/50"
+            : "border-border bg-secondary/40"
         )}
       >
         <UploadCloud className="size-8 text-muted-foreground" />
-        <p className="text-sm font-medium">
-          Drag & drop images here, or click to browse
-        </p>
+        <p className="text-sm font-medium">Drag & drop images here</p>
         <p className="text-xs text-muted-foreground">
-          Upload {MIN}-{MAX} images (JPG, PNG, WebP)
+          Or use the buttons below
         </p>
+      </div>
+
+      {/* Action buttons */}
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => cameraInputRef.current?.click()}
+          disabled={images.length >= MAX}
+        >
+          <Camera className="size-4" /> Take Photo
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => galleryInputRef.current?.click()}
+          disabled={images.length >= MAX}
+        >
+          <Images className="size-4" /> Upload from Gallery
+        </Button>
         <input
-          ref={inputRef}
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={(e) => {
+            addFiles(e.target.files, activeCategory);
+            e.target.value = "";
+          }}
+        />
+        <input
+          ref={galleryInputRef}
           type="file"
           accept="image/*"
           multiple
           className="hidden"
           onChange={(e) => {
-            addFiles(e.target.files);
+            addFiles(e.target.files, activeCategory);
             e.target.value = "";
           }}
         />
       </div>
-      {error && <p className="text-xs text-red-600">{error}</p>}
-      {uploading && (
-        <div className="space-y-1">
-          <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
-            <div
-              className="h-full rounded-full bg-primary transition-all duration-300"
-              style={{ width: `${uploadProgress}%` }}
-            />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Uploading photos… {uploadProgress}%
-          </p>
+
+      {/* Category selector */}
+      <div>
+        <p className="mb-2 text-xs font-medium text-muted-foreground">
+          Category for next upload:
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {CATEGORIES.map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => setActiveCategory(cat)}
+              className={cn(
+                "rounded-full px-3 py-1 text-xs font-medium transition",
+                activeCategory === cat
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-secondary text-muted-foreground hover:bg-secondary/80"
+              )}
+            >
+              {cat}
+            </button>
+          ))}
         </div>
-      )}
+      </div>
+
+      {error && <p className="text-xs text-red-600">{error}</p>}
+
+      {/* Photo grid */}
       {images.length > 0 && (
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
           {images.map((img, i) => (
             <div
               key={img.id}
-              className="group relative aspect-square overflow-hidden rounded-md border border-border"
+              className="group relative aspect-square overflow-hidden rounded-md border border-border bg-secondary/20"
             >
               <img
                 src={img.url}
-                alt="preview"
+                alt={img.category}
                 className="size-full object-cover"
               />
+
+              {/* Cover badge */}
               {i === 0 && (
-                <span className="absolute left-1 top-1 rounded bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground shadow">
-                  Cover Photo
+                <span className="absolute left-1 top-1 flex items-center gap-0.5 rounded bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground shadow">
+                  <Star className="size-2.5 fill-current" /> Cover
                 </span>
               )}
+
+              {/* Category tag */}
+              <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                {img.category}
+              </span>
+
+              {/* Upload progress overlay */}
+              {img.status === "uploading" && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/50">
+                  <Loader2 className="size-5 animate-spin text-white" />
+                  <div className="h-1.5 w-3/4 overflow-hidden rounded-full bg-white/30">
+                    <div
+                      className="h-full rounded-full bg-white transition-all"
+                      style={{ width: `${img.progress}%` }}
+                    />
+                  </div>
+                  <span className="text-[10px] text-white">
+                    {img.progress}%
+                  </span>
+                </div>
+              )}
+
+              {/* Uploaded indicator */}
+              {img.status === "done" && (
+                <span className="absolute right-1 top-1 flex items-center gap-0.5 rounded bg-green-600 px-1 py-0.5 text-[9px] font-semibold text-white shadow">
+                  <CheckIcon className="size-2.5" /> Uploaded
+                </span>
+              )}
+
+              {/* Error indicator */}
+              {img.status === "error" && (
+                <span className="absolute right-1 top-1 rounded bg-red-600 px-1 py-0.5 text-[9px] font-semibold text-white shadow">
+                  Failed
+                </span>
+              )}
+
+              {/* Remove button */}
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   removeImage(img.id);
                 }}
-                className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white opacity-0 transition group-hover:opacity-100"
+                className="absolute right-1 bottom-1 rounded-full bg-black/60 p-1 text-white opacity-0 transition group-hover:opacity-100"
                 aria-label="Remove image"
               >
                 <X className="size-3.5" />
               </button>
+
+              {/* Set as cover button (non-cover images only) */}
+              {i !== 0 && img.status === "done" && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCover(img.id);
+                  }}
+                  className="absolute left-1 bottom-1 rounded-full bg-black/60 p-1 text-white opacity-0 transition group-hover:opacity-100"
+                  aria-label="Set as cover"
+                  title="Set as cover"
+                >
+                  <Star className="size-3.5" />
+                </button>
+              )}
             </div>
           ))}
         </div>
       )}
-      {images.length > 0 && images.length < MIN && (
+
+      {images.length === 0 && (
         <p className="flex items-center gap-1.5 text-xs text-amber-600">
           <ImageIcon className="size-3.5" />
-          Add at least {MIN - images.length} more image(s) to continue.
+          Please upload at least 1 photo.
         </p>
       )}
     </div>

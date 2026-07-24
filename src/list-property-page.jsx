@@ -35,24 +35,9 @@ const AMENITIES = [
   "Boys Quarters",
 ];
 
-const MIN_PHOTOS = 5;
+const MIN_PHOTOS = 1;
 const MAX_PHOTOS = 10;
 const MAX_INSPECTION_FEE = 100000;
-
-async function uploadImage(file, folder) {
-  const ext = file.name.split(".").pop() || "jpg";
-  const path = `${folder}/${Date.now()}-${Math.random()
-    .toString(36)
-    .slice(2)}.${ext}`;
-  const { error } = await supabase.storage
-    .from(PROPERTY_BUCKET)
-    .upload(path, file, { upsert: false });
-  if (error) throw error;
-  const { data: pub } = supabase.storage
-    .from(PROPERTY_BUCKET)
-    .getPublicUrl(path);
-  return pub.publicUrl;
-}
 
 async function uploadLegalDoc(file) {
   const ext = file.name.split(".").pop() || "pdf";
@@ -87,9 +72,8 @@ export default function ListPropertyPage({ onBack }) {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef(null);
+  const tempPropertyId = useRef(`temp-${Date.now()}`).current;
 
   function toggleAmenity(amenity) {
     setSelectedAmenities((prev) =>
@@ -126,9 +110,11 @@ export default function ListPropertyPage({ onBack }) {
     const priceNum = parseFloat(price.replace(/[^\d.]/g, ""));
     if (!priceNum || priceNum <= 0) return setError("Please enter a valid price.");
     if (images.length < MIN_PHOTOS)
-      return setError(`Please upload at least ${MIN_PHOTOS} photos.`);
+      return setError("Please upload at least 1 photo.");
     if (images.length > MAX_PHOTOS)
       return setError(`Maximum of ${MAX_PHOTOS} photos allowed.`);
+    if (images.some((img) => img.status === "uploading"))
+      return setError("Please wait for all uploads to finish.");
     if (!legalDoc) return setError("Please upload your legal document (C of O, R of O, or Deed).");
     if (!address.trim()) return setError("Please enter the property address.");
     if (!coords) return setError("Please pin the exact location on the map.");
@@ -139,19 +125,16 @@ export default function ListPropertyPage({ onBack }) {
 
     setSubmitting(true);
     try {
-      setUploading(true);
-      setUploadProgress(0);
-      const folder = `property-${Date.now()}`;
-      const imageUrls = [];
-      for (let i = 0; i < images.length; i++) {
-        const url = await uploadImage(images[i].file, folder);
-        imageUrls.push(url);
-        setUploadProgress(Math.round(((i + 1) / images.length) * 100));
-      }
       const legalDocUrl = await uploadLegalDoc(legalDoc);
+      const imageUrls = images.map((img) => img.url);
+      const photos = images.map((img, i) => ({
+        url: img.url,
+        category: img.category,
+        is_cover: i === 0,
+      }));
       const fingerprintId = `DN-${String(Date.now()).slice(-6)}`;
 
-      const { error: insertError } = await supabase.from("properties").insert({
+      const { data: inserted, error: insertError } = await supabase.from("properties").insert({
         title: title.trim(),
         description: description.trim(),
         price: priceNum,
@@ -160,13 +143,14 @@ export default function ListPropertyPage({ onBack }) {
         lng: coords.lng,
         image_urls: imageUrls,
         images: imageUrls,
+        photos: photos,
         location: address.trim(),
         legal_docs_url: legalDocUrl,
         inspection_fee: inspectionNum,
         amenities: selectedAmenities,
         fingerprint_id: fingerprintId,
         status: "pending",
-      });
+      }).select("id").maybeSingle();
 
       if (insertError) throw insertError;
 
@@ -180,7 +164,6 @@ export default function ListPropertyPage({ onBack }) {
       );
     } finally {
       setSubmitting(false);
-      setUploading(false);
     }
   }
 
@@ -317,8 +300,8 @@ export default function ListPropertyPage({ onBack }) {
             <ImageUploader
               images={images}
               setImages={setImages}
-              uploading={uploading}
-              uploadProgress={uploadProgress}
+              userId={user?.id || "anonymous"}
+              tempPropertyId={tempPropertyId}
             />
           </section>
 
@@ -488,7 +471,7 @@ export default function ListPropertyPage({ onBack }) {
 
           <Button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || images.length < MIN_PHOTOS || images.some((img) => img.status === "uploading")}
             className="w-full sm:w-auto"
           >
             {submitting ? (
