@@ -158,27 +158,59 @@ export function MapPicker({ value, onChange }) {
 }
 
 /* ---------- Address Autocomplete using Google Places ---------- */
+let placesScriptLoading = null;
+
+function loadGooglePlacesScript(apiKey) {
+  if (window.google?.maps?.places) return Promise.resolve();
+  if (placesScriptLoading) return placesScriptLoading;
+  placesScriptLoading = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&v=weekly`;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => {
+      placesScriptLoading = null;
+      reject(new Error("Failed to load Google Maps."));
+    };
+    document.head.appendChild(script);
+  });
+  return placesScriptLoading;
+}
+
 export function AddressAutocomplete({ value, onChange, onPlaceSelect }) {
   const inputRef = useRef(null);
   const [suggestions, setSuggestions] = useState([]);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [loading, setLoading] = useState(false);
+  const [scriptReady, setScriptReady] = useState(
+    () => Boolean(window.google?.maps?.places)
+  );
+  const [scriptError, setScriptError] = useState(null);
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 
   useEffect(() => {
-    if (!apiKey || !value || value.length < 3) {
+    if (!apiKey || scriptReady) return;
+    let cancelled = false;
+    loadGooglePlacesScript(apiKey)
+      .then(() => {
+        if (!cancelled) setScriptReady(true);
+      })
+      .catch((err) => {
+        if (!cancelled) setScriptError(err.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [apiKey, scriptReady]);
+
+  useEffect(() => {
+    if (!apiKey || !scriptReady || !value || value.length < 3) {
       setSuggestions([]);
       return;
     }
     setLoading(true);
-    const t = setTimeout(async () => {
+    const t = setTimeout(() => {
       try {
-        const url =
-          `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(
-            value
-          )}&components=country:ng&key=${apiKey}`;
-        // Google Places Autocomplete (REST) is not usable from the browser due to CORS.
-        // Fallback: use the JS SDK Autocomplete widget if loaded.
         if (window.google?.maps?.places) {
           const service =
             new window.google.maps.places.AutocompleteService();
@@ -198,7 +230,6 @@ export function AddressAutocomplete({ value, onChange, onPlaceSelect }) {
             }
           );
         } else {
-          // Pretend REST call (CORS-blocked in browser) — surface a helpful note.
           setLoading(false);
           setSuggestions([]);
         }
@@ -209,7 +240,7 @@ export function AddressAutocomplete({ value, onChange, onPlaceSelect }) {
     }, 300);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, apiKey]);
+  }, [value, apiKey, scriptReady]);
 
   function selectPlace(pred) {
     onChange(pred.description);
@@ -288,6 +319,11 @@ export function AddressAutocomplete({ value, onChange, onPlaceSelect }) {
       {!apiKey && (
         <p className="text-xs text-amber-600">
           Set VITE_GOOGLE_MAPS_API_KEY in .env to enable Google Places autocomplete.
+        </p>
+      )}
+      {apiKey && scriptError && (
+        <p className="text-xs text-red-600">
+          Could not load Google Maps. Check your network and API key.
         </p>
       )}
     </div>
