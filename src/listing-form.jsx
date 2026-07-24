@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { MapPin, Search, CloudUpload as UploadCloud, X, Image as ImageIcon, Loader as Loader2, Crosshair, CircleCheck as CheckCircle2, Camera, Images, CheckCircle2 as CheckIcon, Star } from "lucide-react";
+import { MapPin, Search, CloudUpload as UploadCloud, X, Image as ImageIcon, Loader as Loader2, Crosshair, CircleCheck as CheckCircle2, Camera, Images, CircleCheck as CheckIcon, Star } from "lucide-react";
 import {
   Button,
   Input,
@@ -10,6 +10,7 @@ import {
   cn,
 } from "./components.jsx";
 import { propertyTypes } from "./data.js";
+import { supabase, PROPERTY_BUCKET } from "./lib/supabase.js";
 
 /* ---------- Google Maps "Drop Pin" component ---------- */
 const DEFAULT_CENTER = { lat: 6.45, lng: 3.4 }; // Lagos
