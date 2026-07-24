@@ -12,6 +12,7 @@ import {
 import { AddPropertyModal } from "./src/listing-form.jsx";
 import KycPage from "./src/kyc-page.jsx";
 import LoginPage from "./src/login-page.jsx";
+import VerifyEmailPage from "./src/verify-email-page.jsx";
 import AdminDashboard from "./src/admin-dashboard.jsx";
 import EscrowPage from "./src/escrow-page.jsx";
 import ListPropertyPage from "./src/list-property-page.jsx";
@@ -59,7 +60,8 @@ function App() {
   const isEscrow = route.startsWith("#/escrow");
   const isListProperty = route.startsWith("#/list-property");
   const isPropertyDetail = /^#\/property\//.test(route);
-  const isSubpage = isKyc || isLogin || isAdmin || isEscrow || isListProperty || isPropertyDetail;
+  const isVerifyEmail = route.startsWith("#/verify-email");
+  const isSubpage = isKyc || isLogin || isAdmin || isEscrow || isListProperty || isPropertyDetail || isVerifyEmail;
 
   useEffect(() => {
     if (isSubpage) window.scrollTo(0, 0);
@@ -157,6 +159,18 @@ function App() {
           onClose={() => setModalOpen(false)}
           onSubmit={handleAddProperty}
         />
+      </div>
+    );
+  }
+
+  if (isVerifyEmail) {
+    return (
+      <div className="min-h-screen bg-background">
+        <SiteHeader onAddProperty={goListProperty} isVerified={isVerified} />
+        <main>
+          <VerifyEmailPage onBack={goHome} />
+        </main>
+        <SiteFooter />
       </div>
     );
   }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Chrome as Home, Loader as Loader2, Mail, Lock, User as UserIcon, KeyRound } from "lucide-react";
+import { Chrome as Home, Loader as Loader2, Mail, Lock, User as UserIcon, KeyRound, MailCheck } from "lucide-react";
 import { supabase } from "./lib/supabase.js";
 import { Button } from "./components.jsx";
 
@@ -12,6 +12,9 @@ export default function LoginPage({ onBack }) {
   const [info, setInfo] = useState("");
   const [toast, setToast] = useState("");
   const [resetSending, setResetSending] = useState(false);
+  const [resendSending, setResendSending] = useState(false);
+  const [showResend, setShowResend] = useState(false);
+  const [resendEmail, setResendEmail] = useState("");
 
   useEffect(() => {
     const syncMode = () => {
@@ -19,6 +22,9 @@ export default function LoginPage({ onBack }) {
       setMode(params.get("mode") === "signup" ? "signup" : "login");
       setError("");
       setInfo("");
+      if (params.get("verified") === "true") {
+        setToast("Email verified! You can now login");
+      }
     };
     syncMode();
     window.addEventListener("hashchange", syncMode);
@@ -67,9 +73,24 @@ export default function LoginPage({ onBack }) {
         });
         if (signUpError) throw signUpError;
         if (data.user) {
-          setInfo("Account created! You can now sign in.");
+          setInfo("Account created! We've sent you a verification email. Please check your inbox and click the link to verify your account before logging in.");
           setMode("login");
           setPassword("");
+          setShowResend(true);
+          setResendEmail(email.trim());
+          try {
+            const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-verification-email`;
+            await fetch(apiUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+              },
+              body: JSON.stringify({ email: email.trim() }),
+            });
+          } catch {
+            // email send failure is non-blocking — user can resend later
+          }
         }
       } else {
         const { error: signInError } = await supabase.auth.signInWithPassword({
@@ -81,11 +102,43 @@ export default function LoginPage({ onBack }) {
         window.location.reload();
       }
     } catch (err) {
-      setError(err.message || "Authentication failed. Please try again.");
+      const msg = err.message || "Authentication failed. Please try again.";
+      setError(msg);
+      if (msg.toLowerCase().includes("email not confirmed") || msg.toLowerCase().includes("not verified")) {
+        setShowResend(true);
+        setResendEmail(email.trim());
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  async function handleResendVerification() {
+    if (!resendEmail) return;
+    setResendSending(true);
+    setError("");
+    setInfo("");
+    try {
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-verification-email`;
+      const res = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ email: resendEmail }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to send email");
+      }
+      setInfo("Verification email sent! Check your inbox.");
+    } catch (err) {
+      setError(err.message || "Failed to resend verification email.");
+    } finally {
+      setResendSending(false);
+    }
+  }
 
   return (
     <div className="mx-auto flex min-h-[80vh] max-w-md flex-col justify-center px-4 py-12">
@@ -161,6 +214,20 @@ export default function LoginPage({ onBack }) {
         {info && (
           <div className="rounded-md bg-green-50 px-3 py-2.5 text-sm text-green-700 ring-1 ring-green-200">
             {info}
+          </div>
+        )}
+
+        {showResend && mode === "login" && (
+          <div className="flex items-center gap-2 rounded-md bg-amber-50 px-3 py-2.5 text-sm text-amber-700 ring-1 ring-amber-200">
+            <MailCheck className="size-4 shrink-0" />
+            <button
+              type="button"
+              onClick={handleResendVerification}
+              disabled={resendSending}
+              className="font-semibold underline hover:text-amber-800 disabled:opacity-50"
+            >
+              {resendSending ? "Sending…" : "Resend verification email"}
+            </button>
           </div>
         )}
 
