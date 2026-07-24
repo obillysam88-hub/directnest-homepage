@@ -126,33 +126,69 @@ export default function ListPropertyPage({ onBack }) {
     setSubmitting(true);
     try {
       const legalDocUrl = await uploadLegalDoc(legalDoc);
-      const imageUrls = images.map((img) => img.url);
-      const photos = images.map((img, i) => ({
-        url: img.url,
-        category: img.category,
-        is_cover: i === 0,
-      }));
       const fingerprintId = `DN-${String(Date.now()).slice(-6)}`;
 
-      const { data: inserted, error: insertError } = await supabase.from("properties").insert({
-        title: title.trim(),
-        description: description.trim(),
-        price: priceNum,
-        address: address.trim(),
-        lat: coords.lat,
-        lng: coords.lng,
-        image_urls: imageUrls,
-        images: imageUrls,
-        photos: photos,
-        location: address.trim(),
-        legal_docs_url: legalDocUrl,
-        inspection_fee: inspectionNum,
-        amenities: selectedAmenities,
-        fingerprint_id: fingerprintId,
-        status: "pending",
-      }).select("id").maybeSingle();
+      // 1. Create property row first to get a real property_id
+      const { data: inserted, error: insertError } = await supabase
+        .from("properties")
+        .insert({
+          title: title.trim(),
+          description: description.trim(),
+          price: priceNum,
+          address: address.trim(),
+          lat: coords.lat,
+          lng: coords.lng,
+          image_urls: [],
+          images: [],
+          photos: [],
+          location: address.trim(),
+          legal_docs_url: legalDocUrl,
+          inspection_fee: inspectionNum,
+          amenities: selectedAmenities,
+          fingerprint_id: fingerprintId,
+          status: "pending",
+        })
+        .select("id")
+        .maybeSingle();
 
       if (insertError) throw insertError;
+      const propertyId = inserted?.id;
+      if (!propertyId) throw new Error("Failed to create property record.");
+
+      // 2. Move images from temp folder to final folder and collect new URLs
+      const finalPhotos = [];
+      const finalImageUrls = [];
+      for (let i = 0; i < images.length; i++) {
+        const img = images[i];
+        if (!img.storagePath) continue;
+        const safeCat = img.category.toLowerCase().replace(/\s+/g, "-");
+        const newPath = `${user?.id || "anonymous"}/${propertyId}/${safeCat}_${Date.now()}.jpg`;
+        const { error: moveError } = await supabase.storage
+          .from(PROPERTY_BUCKET)
+          .move(img.storagePath, newPath);
+        if (moveError) throw moveError;
+        const { data: pub } = supabase.storage
+          .from(PROPERTY_BUCKET)
+          .getPublicUrl(newPath);
+        finalImageUrls.push(pub.publicUrl);
+        finalPhotos.push({
+          url: pub.publicUrl,
+          category: img.category,
+          isCover: i === 0,
+        });
+      }
+
+      // 3. Save final URLs to DB
+      const { error: updateError } = await supabase
+        .from("properties")
+        .update({
+          image_urls: finalImageUrls,
+          images: finalImageUrls,
+          photos: finalPhotos,
+        })
+        .eq("id", propertyId);
+
+      if (updateError) throw updateError;
 
       setSubmitted(true);
       setToast("Submitted for Admin Review. 24hr SLA");
@@ -294,7 +330,7 @@ export default function ListPropertyPage({ onBack }) {
             <div>
               <h2 className="text-base font-semibold">Property Photos</h2>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Required: Front, Living, Kitchen, 2 Bedrooms, Bath
+                Take photos room by room. At least 1 photo required. First photo is your cover photo.
               </p>
             </div>
             <ImageUploader

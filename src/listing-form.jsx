@@ -262,59 +262,73 @@ export function AddressAutocomplete({ value, onChange, onPlaceSelect }) {
   );
 }
 
-/* ---------- Image Upload: 5-20 images, drag-drop ---------- */
+/* ---------- Image Upload: instant capture + room categorization ---------- */
+const PHOTO_CATEGORIES = [
+  "Front View",
+  "Living Room",
+  "Kitchen",
+  "Bedroom",
+  "Bathroom",
+  "Toilet",
+  "Other",
+];
+
+const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+
+function compressImage(file, maxW = 1920) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxW) {
+          height = Math.round((height * maxW) / width);
+          width = maxW;
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error("Compression failed"));
+          },
+          "image/jpeg",
+          0.82
+        );
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function validateFile(file) {
+  if (!ACCEPTED_TYPES.includes(file.type))
+    return "Only JPG, PNG, and WEBP files are allowed.";
+  if (file.size > MAX_FILE_SIZE)
+    return "Each image must be under 5MB.";
+  return null;
+}
+
 export function ImageUploader({ images, setImages, userId, tempPropertyId }) {
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState("");
-  const [activeCategory, setActiveCategory] = useState("Front View");
+  const [pendingFiles, setPendingFiles] = useState(null);
+  const [pendingCategory, setPendingCategory] = useState("Other");
+  const [draggedId, setDraggedId] = useState(null);
+  const [dragOverId, setDragOverId] = useState(null);
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
 
   const MIN = 1;
   const MAX = 10;
-
-  const CATEGORIES = [
-    "Front View",
-    "Living Room",
-    "Kitchen",
-    "Bedrooms",
-    "Bathrooms",
-    "Toilet",
-    "Other",
-  ];
-
-  function compressImage(file, maxW = 1920) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-          let { width, height } = img;
-          if (width > maxW) {
-            height = Math.round((height * maxW) / width);
-            width = maxW;
-          }
-          const canvas = document.createElement("canvas");
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext("2d");
-          ctx.drawImage(img, 0, 0, width, height);
-          canvas.toBlob(
-            (blob) => {
-              if (blob) resolve(blob);
-              else reject(new Error("Compression failed"));
-            },
-            "image/jpeg",
-            0.82
-          );
-        };
-        img.onerror = reject;
-        img.src = e.target.result;
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  }
 
   async function uploadToSupabase(file, category) {
     const compressed = await compressImage(file);
@@ -333,21 +347,34 @@ export function ImageUploader({ images, setImages, userId, tempPropertyId }) {
     return { url: pub.publicUrl, path };
   }
 
-  async function addFiles(fileList, category) {
+  function handleFilesSelected(fileList) {
     setError("");
-    const incoming = Array.from(fileList).filter((f) =>
-      f.type.startsWith("image/")
-    );
-    if (!incoming.length) {
-      setError("Please select image files only.");
-      return;
+    const incoming = Array.from(fileList);
+    const valid = [];
+    for (const file of incoming) {
+      const err = validateFile(file);
+      if (err) {
+        setError(err);
+        continue;
+      }
+      valid.push(file);
     }
-    if (images.length + incoming.length > MAX) {
+    if (!valid.length) return;
+    if (images.length + valid.length > MAX) {
       setError(`You can upload a maximum of ${MAX} images.`);
       return;
     }
+    setPendingFiles(valid);
+    setPendingCategory("Other");
+  }
 
-    for (const file of incoming) {
+  async function confirmCategoryUpload() {
+    if (!pendingFiles) return;
+    const category = pendingCategory;
+    const files = pendingFiles;
+    setPendingFiles(null);
+
+    for (const file of files) {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       const previewUrl = URL.createObjectURL(file);
       const newImg = {
@@ -362,7 +389,6 @@ export function ImageUploader({ images, setImages, userId, tempPropertyId }) {
       setImages((prev) => [...prev, newImg]);
 
       try {
-        // Simulate progress for UX
         const progressInterval = setInterval(() => {
           setImages((prev) =>
             prev.map((p) =>
@@ -395,20 +421,20 @@ export function ImageUploader({ images, setImages, userId, tempPropertyId }) {
             p.id === id ? { ...p, status: "error", progress: 0 } : p
           )
         );
-        setError(
-          "Upload failed: " + (err.message || "Unknown error")
-        );
+        setError("Upload failed: " + (err.message || "Unknown error"));
       }
     }
+  }
+
+  function cancelCategoryModal() {
+    setPendingFiles(null);
   }
 
   async function removeImage(id) {
     const img = images.find((p) => p.id === id);
     if (img?.storagePath) {
       try {
-        await supabase.storage
-          .from(PROPERTY_BUCKET)
-          .remove([img.storagePath]);
+        await supabase.storage.from(PROPERTY_BUCKET).remove([img.storagePath]);
       } catch {
         // best-effort delete
       }
@@ -426,53 +452,62 @@ export function ImageUploader({ images, setImages, userId, tempPropertyId }) {
     });
   }
 
+  function handleDragStart(id) {
+    setDraggedId(id);
+  }
+  function handleDragOverItem(e, overId) {
+    e.preventDefault();
+    setDragOverId(overId);
+  }
+  function handleDropItem(e, overId) {
+    e.preventDefault();
+    if (!draggedId || draggedId === overId) return;
+    setImages((prev) => {
+      const fromIdx = prev.findIndex((p) => p.id === draggedId);
+      const toIdx = prev.findIndex((p) => p.id === overId);
+      if (fromIdx === -1 || toIdx === -1) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, moved);
+      return next;
+    });
+    setDraggedId(null);
+    setDragOverId(null);
+  }
+
   function handleDrop(e) {
     e.preventDefault();
     setDragging(false);
-    addFiles(e.dataTransfer.files, activeCategory);
+    handleFilesSelected(e.dataTransfer.files);
   }
-
   function handleDragOver(e) {
     e.preventDefault();
     setDragging(true);
   }
-
   function handleDragLeave(e) {
     e.preventDefault();
     setDragging(false);
   }
 
+  // Group images by category for display, preserving order
+  const grouped = PHOTO_CATEGORIES.map((cat) => ({
+    category: cat,
+    items: images.filter((img) => img.category === cat),
+  })).filter((g) => g.items.length > 0);
+
   return (
     <div className="space-y-4">
+      {/* Counter */}
       <div className="flex items-center justify-between">
         <Label>
-          Property photos{" "}
-          <span className="font-normal text-muted-foreground">
-            ({images.length}/{MAX} uploaded)
-          </span>
+          {images.length}/{MAX} photos uploaded
         </Label>
-      </div>
-
-      {/* Drag & drop area */}
-      <div
-        onDrop={handleDrop}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        className={cn(
-          "flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-6 text-center transition",
-          dragging
-            ? "border-primary bg-primary/5"
-            : "border-border bg-secondary/40"
+        {images.length < MIN && (
+          <span className="text-xs text-amber-600">At least 1 required</span>
         )}
-      >
-        <UploadCloud className="size-8 text-muted-foreground" />
-        <p className="text-sm font-medium">Drag & drop images here</p>
-        <p className="text-xs text-muted-foreground">
-          Or use the buttons below
-        </p>
       </div>
 
-      {/* Action buttons */}
+      {/* Action buttons above drag-drop */}
       <div className="flex gap-2">
         <Button
           type="button"
@@ -495,137 +530,159 @@ export function ImageUploader({ images, setImages, userId, tempPropertyId }) {
         <input
           ref={cameraInputRef}
           type="file"
-          accept="image/*"
+          accept="image/jpeg,image/png,image/webp"
           capture="environment"
           className="hidden"
           onChange={(e) => {
-            addFiles(e.target.files, activeCategory);
+            handleFilesSelected(e.target.files);
             e.target.value = "";
           }}
         />
         <input
           ref={galleryInputRef}
           type="file"
-          accept="image/*"
+          accept="image/jpeg,image/png,image/webp"
           multiple
           className="hidden"
           onChange={(e) => {
-            addFiles(e.target.files, activeCategory);
+            handleFilesSelected(e.target.files);
             e.target.value = "";
           }}
         />
       </div>
 
-      {/* Category selector */}
-      <div>
-        <p className="mb-2 text-xs font-medium text-muted-foreground">
-          Category for next upload:
+      {/* Drag & drop area */}
+      <div
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        className={cn(
+          "flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-6 text-center transition",
+          dragging
+            ? "border-primary bg-primary/5"
+            : "border-border bg-secondary/40"
+        )}
+      >
+        <UploadCloud className="size-8 text-muted-foreground" />
+        <p className="text-sm font-medium">Drag & drop images here</p>
+        <p className="text-xs text-muted-foreground">
+          JPG, PNG, WEBP — max 5MB each
         </p>
-        <div className="flex flex-wrap gap-1.5">
-          {CATEGORIES.map((cat) => (
-            <button
-              key={cat}
-              type="button"
-              onClick={() => setActiveCategory(cat)}
-              className={cn(
-                "rounded-full px-3 py-1 text-xs font-medium transition",
-                activeCategory === cat
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-secondary text-muted-foreground hover:bg-secondary/80"
-              )}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
       </div>
 
       {error && <p className="text-xs text-red-600">{error}</p>}
 
-      {/* Photo grid */}
+      {/* Grouped photo grid */}
       {images.length > 0 && (
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
-          {images.map((img, i) => (
-            <div
-              key={img.id}
-              className="group relative aspect-square overflow-hidden rounded-md border border-border bg-secondary/20"
-            >
-              <img
-                src={img.url}
-                alt={img.category}
-                className="size-full object-cover"
-              />
-
-              {/* Cover badge */}
-              {i === 0 && (
-                <span className="absolute left-1 top-1 flex items-center gap-0.5 rounded bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground shadow">
-                  <Star className="size-2.5 fill-current" /> Cover
-                </span>
-              )}
-
-              {/* Category tag */}
-              <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
-                {img.category}
-              </span>
-
-              {/* Upload progress overlay */}
-              {img.status === "uploading" && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/50">
-                  <Loader2 className="size-5 animate-spin text-white" />
-                  <div className="h-1.5 w-3/4 overflow-hidden rounded-full bg-white/30">
+        <div className="space-y-4">
+          {grouped.map(({ category, items }) => (
+            <div key={category}>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {category} ({items.length})
+              </h3>
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
+                {items.map((img) => {
+                  const globalIdx = images.findIndex((p) => p.id === img.id);
+                  const isCover = globalIdx === 0;
+                  return (
                     <div
-                      className="h-full rounded-full bg-white transition-all"
-                      style={{ width: `${img.progress}%` }}
-                    />
-                  </div>
-                  <span className="text-[10px] text-white">
-                    {img.progress}%
-                  </span>
-                </div>
-              )}
+                      key={img.id}
+                      draggable={img.status === "done"}
+                      onDragStart={() => handleDragStart(img.id)}
+                      onDragOver={(e) => handleDragOverItem(e, img.id)}
+                      onDrop={(e) => handleDropItem(e, img.id)}
+                      onDragEnd={() => {
+                        setDraggedId(null);
+                        setDragOverId(null);
+                      }}
+                      className={cn(
+                        "group relative aspect-square overflow-hidden rounded-md border bg-secondary/20 transition",
+                        draggedId === img.id && "opacity-50",
+                        dragOverId === img.id
+                          ? "border-primary ring-2 ring-primary/40"
+                          : "border-border"
+                      )}
+                    >
+                      <img
+                        src={img.url}
+                        alt={img.category}
+                        className="size-full object-cover"
+                      />
 
-              {/* Uploaded indicator */}
-              {img.status === "done" && (
-                <span className="absolute right-1 top-1 flex items-center gap-0.5 rounded bg-green-600 px-1 py-0.5 text-[9px] font-semibold text-white shadow">
-                  <CheckIcon className="size-2.5" /> Uploaded
-                </span>
-              )}
+                      {/* Cover badge */}
+                      {isCover && (
+                        <span className="absolute left-1 top-1 flex items-center gap-0.5 rounded bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground shadow">
+                          <Star className="size-2.5 fill-current" /> Cover
+                        </span>
+                      )}
 
-              {/* Error indicator */}
-              {img.status === "error" && (
-                <span className="absolute right-1 top-1 rounded bg-red-600 px-1 py-0.5 text-[9px] font-semibold text-white shadow">
-                  Failed
-                </span>
-              )}
+                      {/* Category tag */}
+                      <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                        {img.category}
+                      </span>
 
-              {/* Remove button */}
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  removeImage(img.id);
-                }}
-                className="absolute right-1 bottom-1 rounded-full bg-black/60 p-1 text-white opacity-0 transition group-hover:opacity-100"
-                aria-label="Remove image"
-              >
-                <X className="size-3.5" />
-              </button>
+                      {/* Upload progress overlay */}
+                      {img.status === "uploading" && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/50">
+                          <Loader2 className="size-5 animate-spin text-white" />
+                          <div className="h-1.5 w-3/4 overflow-hidden rounded-full bg-white/30">
+                            <div
+                              className="h-full rounded-full bg-white transition-all"
+                              style={{ width: `${img.progress}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] text-white">
+                            {img.progress}%
+                          </span>
+                        </div>
+                      )}
 
-              {/* Set as cover button (non-cover images only) */}
-              {i !== 0 && img.status === "done" && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setCover(img.id);
-                  }}
-                  className="absolute left-1 bottom-1 rounded-full bg-black/60 p-1 text-white opacity-0 transition group-hover:opacity-100"
-                  aria-label="Set as cover"
-                  title="Set as cover"
-                >
-                  <Star className="size-3.5" />
-                </button>
-              )}
+                      {/* Uploaded indicator */}
+                      {img.status === "done" && (
+                        <span className="absolute right-1 top-1 flex items-center gap-0.5 rounded bg-green-600 px-1 py-0.5 text-[9px] font-semibold text-white shadow">
+                          <CheckIcon className="size-2.5" /> Uploaded
+                        </span>
+                      )}
+
+                      {/* Error indicator */}
+                      {img.status === "error" && (
+                        <span className="absolute right-1 top-1 rounded bg-red-600 px-1 py-0.5 text-[9px] font-semibold text-white shadow">
+                          Failed
+                        </span>
+                      )}
+
+                      {/* Remove button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeImage(img.id);
+                        }}
+                        className="absolute right-1 bottom-1 rounded-full bg-black/60 p-1 text-white opacity-0 transition group-hover:opacity-100"
+                        aria-label="Remove image"
+                      >
+                        <X className="size-3.5" />
+                      </button>
+
+                      {/* Set as cover button (non-cover images only) */}
+                      {!isCover && img.status === "done" && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCover(img.id);
+                          }}
+                          className="absolute left-1 bottom-1 rounded-full bg-black/60 p-1 text-white opacity-0 transition group-hover:opacity-100"
+                          aria-label="Set as cover"
+                          title="Set as cover"
+                        >
+                          <Star className="size-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           ))}
         </div>
@@ -636,6 +693,56 @@ export function ImageUploader({ images, setImages, userId, tempPropertyId }) {
           <ImageIcon className="size-3.5" />
           Please upload at least 1 photo.
         </p>
+      )}
+
+      {/* Category selection modal */}
+      {pendingFiles && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-xl bg-background p-5 shadow-xl">
+            <h3 className="text-base font-semibold">Which room is this?</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {pendingFiles.length} photo{pendingFiles.length > 1 ? "s" : ""} to
+              upload
+            </p>
+            <div className="mt-4 space-y-2">
+              {PHOTO_CATEGORIES.map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setPendingCategory(cat)}
+                  className={cn(
+                    "flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-sm font-medium transition",
+                    pendingCategory === cat
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground hover:bg-secondary"
+                  )}
+                >
+                  {cat}
+                  {pendingCategory === cat && (
+                    <CheckIcon className="size-4 text-primary" />
+                  )}
+                </button>
+              ))}
+            </div>
+            <div className="mt-5 flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1"
+                onClick={cancelCategoryModal}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="flex-1"
+                onClick={confirmCategoryUpload}
+              >
+                Upload
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
