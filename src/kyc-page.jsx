@@ -77,7 +77,7 @@ async function matchFaces(idImageEl, selfieImageEl) {
 }
 
 /* ---------- Liveness prompts ---------- */
-const LIVENESS_PROMPTS = ["Blink", "Turn Left", "Smile"];
+
 
 /* ---------- Progress bar ---------- */
 function ProgressBar({ current, steps }) {
@@ -368,83 +368,114 @@ function CropFaceTool({ imageUrl, onCrop }) {
   );
 }
 
-/* ---------- Liveness camera component ---------- */
+/* ---------- Liveness camera component (fast auto-capture) ---------- */
 function LivenessCamera({ onComplete }) {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const fileInputRef = useRef(null);
-  const [phase, setPhase] = useState("idle");
-  const [promptIndex, setPromptIndex] = useState(0);
-  const [secondsLeft, setSecondsLeft] = useState(5);
-  const [cameraReady, setCameraReady] = useState(false);
+  const detectTimerRef = useRef(null);
+  const captureTimerRef = useRef(null);
+  const retryCountRef = useRef(0);
+  const [phase, setPhase] = useState("starting");
+  const [faceAligned, setFaceAligned] = useState(false);
+  const [capturing, setCapturing] = useState(false);
   const [error, setError] = useState("");
-  const [permissionDenied, setPermissionDenied] = useState(false);
+  const [networkRetrying, setNetworkRetrying] = useState(false);
+  const [retryCountdown, setRetryCountdown] = useState(0);
 
   async function startCamera() {
     setError("");
-    setPermissionDenied(false);
-    setPhase("idle");
-    setCameraReady(false);
+    setNetworkRetrying(false);
+    setPhase("starting");
+    setFaceAligned(false);
+    setCapturing(false);
+    retryCountRef.current = 0;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
         audio: false,
       });
       streamRef.current = stream;
-      if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); }
-      setCameraReady(true);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      setPhase("live");
+      startFaceDetection();
     } catch (err) {
       const name = err?.name || "";
       if (name === "NotAllowedError" || name === "PermissionDeniedError") {
-        setError("Camera permission was denied. Please allow camera access in your browser settings, or upload a selfie photo instead.");
+        setError("Camera access needed. Tap to enable in settings.");
       } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
-        setError("No camera found on this device. You can upload a selfie photo instead.");
+        setError("No camera found on this device. Upload a selfie photo instead.");
       } else {
-        setError("Could not access camera. You can retry or upload a selfie photo instead.");
+        setError("Could not access camera. Tap retry or upload a selfie.");
       }
-      setPermissionDenied(true);
       setPhase("error");
     }
   }
 
-  useEffect(() => {
-    startCamera();
-    return () => { if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop()); };
-  }, []);
-
-  function handleFileUpload(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const url = URL.createObjectURL(file);
-    onComplete({ file, url });
-    setPhase("done");
-    e.target.value = "";
-  }
-
-  function startRecording() {
-    if (!streamRef.current) return;
-    setPhase("recording");
-    setPromptIndex(0);
-    setSecondsLeft(5);
-  }
-
-  useEffect(() => {
-    if (phase !== "recording") return;
-    const tick = setInterval(() => {
-      setSecondsLeft((prev) => { if (prev <= 1) { captureSelfie(); return 0; } return prev - 1; });
+  async function startCameraWithRetry() {
+    if (retryCountRef.current >= 2) {
+      setError("Network still slow. Upload a selfie photo instead.");
+      setNetworkRetrying(false);
+      setPhase("error");
+      return;
+    }
+    setNetworkRetrying(true);
+    retryCountRef.current += 1;
+    setRetryCountdown(3);
+    const countdown = setInterval(() => {
+      setRetryCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(countdown);
+          startCamera();
+          return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
-    return () => clearInterval(tick);
-  }, [phase]);
+  }
 
-  useEffect(() => {
-    if (phase !== "recording") return;
-    const elapsed = 5 - secondsLeft;
-    setPromptIndex(Math.min(Math.floor((elapsed / 5) * LIVENESS_PROMPTS.length), LIVENESS_PROMPTS.length - 1));
-  }, [secondsLeft, phase]);
+  function startFaceDetection() {
+    let alignedFrames = 0;
+    detectTimerRef.current = setInterval(async () => {
+      const video = videoRef.current;
+      if (!video || !video.videoWidth || phase !== "live") return;
+      try {
+        await ensureModels();
+        const opts = new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.4 });
+        const result = await faceapi.detectSingleFace(video, opts);
+        if (result) {
+          alignedFrames++;
+          if (alignedFrames >= 2) {
+            setFaceAligned(true);
+            if (!capturing && !captureTimerRef.current) {
+              beginCapture();
+            }
+          }
+        } else {
+          alignedFrames = 0;
+          setFaceAligned(false);
+        }
+      } catch {
+        // detection error — keep trying silently
+      }
+    }, 400);
+  }
+
+  function beginCapture() {
+    setCapturing(true);
+    captureTimerRef.current = setTimeout(() => {
+      captureSelfie();
+    }, 2000);
+  }
 
   function captureSelfie() {
     const video = videoRef.current;
     if (!video || !video.videoWidth) return;
+    if (detectTimerRef.current) { clearInterval(detectTimerRef.current); detectTimerRef.current = null; }
+    if (captureTimerRef.current) { clearTimeout(captureTimerRef.current); captureTimerRef.current = null; }
     const canvas = document.createElement("canvas");
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
@@ -458,56 +489,109 @@ function LivenessCamera({ onComplete }) {
     }, "image/jpeg", 0.9);
   }
 
+  function handleFileUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    onComplete({ file, url });
+    setPhase("done");
+    e.target.value = "";
+  }
+
+  useEffect(() => {
+    startCamera();
+    return () => {
+      if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
+      if (detectTimerRef.current) clearInterval(detectTimerRef.current);
+      if (captureTimerRef.current) clearTimeout(captureTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="space-y-3">
-      <div className="relative overflow-hidden rounded-xl border-2 border-border bg-black">
-        <video ref={videoRef} autoPlay playsInline muted className="aspect-[4/3] w-full object-cover" />
-        {phase === "recording" && (
-          <div className="absolute left-0 right-0 top-0 bg-gradient-to-b from-black/70 to-transparent p-4">
-            <div className="flex items-center justify-between">
-              <Badge className="bg-red-500 text-white"><span className="size-2 animate-pulse rounded-full bg-white" /> REC</Badge>
-              <span className="font-mono text-lg font-bold text-white">0:{String(secondsLeft).padStart(1, "0")}</span>
-            </div>
-            <div className="mt-3 rounded-lg bg-primary/90 px-4 py-2 text-center">
-              <p className="text-sm font-bold text-white"><ScanFace className="mr-1.5 inline size-4" />{LIVENESS_PROMPTS[promptIndex]}</p>
-            </div>
+      <div className="relative overflow-hidden rounded-2xl border-2 border-border bg-black">
+        <video ref={videoRef} autoPlay playsInline muted className="aspect-[3/4] w-full object-cover sm:aspect-[4/3]" />
+
+        {/* Face guide circle overlay */}
+        {(phase === "live" || phase === "starting") && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div className={cn(
+              "size-48 rounded-full border-4 transition-all duration-300 sm:size-56",
+              faceAligned ? "border-green-500 shadow-[0_0_20px_rgba(34,197,94,0.5)]" : "border-white/70",
+              capturing && "animate-pulse"
+            )} />
           </div>
         )}
-        {phase === "idle" && cameraReady && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/40 p-4 text-center">
-            <ScanFace className="size-10 text-white/80" />
-            <p className="text-sm font-medium text-white/90">Camera ready. Press start when prepared.</p>
+
+        {/* Guidance text */}
+        {phase === "live" && !capturing && (
+          <div className="absolute inset-x-0 top-0 p-4 text-center">
+            <p className="text-base font-semibold text-white drop-shadow-lg">
+              {faceAligned ? "Hold still…" : "Center your face in the circle"}
+            </p>
+            <p className="mt-1 text-sm text-white/80 drop-shadow">Ensure good lighting</p>
           </div>
         )}
+
+        {/* Capturing overlay */}
+        {capturing && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/50">
+            <div className="flex size-16 items-center justify-center rounded-full border-4 border-white">
+              <Camera className="size-7 text-white" />
+            </div>
+            <p className="text-lg font-bold text-white drop-shadow-lg">Capturing…</p>
+          </div>
+        )}
+
+        {/* Starting overlay */}
+        {phase === "starting" && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+            <Loader2 className="size-8 animate-spin text-white" />
+          </div>
+        )}
+
+        {/* Done overlay */}
         {phase === "done" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-green-600/80 p-4 text-center">
-            <CheckCircle2 className="size-10 text-white" />
-            <p className="text-sm font-semibold text-white">Selfie captured</p>
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-green-600/80">
+            <CheckCircle2 className="size-12 text-white" />
+            <p className="text-lg font-bold text-white">Selfie captured</p>
           </div>
         )}
+
+        {/* Network retry overlay */}
+        {networkRetrying && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-amber-600/90 p-4 text-center">
+            <Loader2 className="size-8 animate-spin text-white" />
+            <p className="text-base font-semibold text-white">Slow connection. Retrying…</p>
+            {retryCountdown > 0 && <p className="text-sm text-white/80">Retry in {retryCountdown}s</p>}
+          </div>
+        )}
+
+        {/* Error overlay */}
         {phase === "error" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background/95 p-4 text-center">
-            <AlertCircle className="size-10 text-red-600" />
-            <p className="text-sm font-medium text-foreground">{error}</p>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Button onClick={startCamera} variant="outline" className="border-red-300 text-red-700 hover:bg-red-50">
-                <RotateCcw className="size-4" /> Retry Camera
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-background/95 p-6 text-center">
+            <AlertCircle className="size-12 text-red-600" />
+            <p className="text-base font-semibold text-foreground">{error}</p>
+            <div className="flex w-full max-w-xs flex-col gap-3">
+              <Button onClick={startCamera} className="h-14 w-full bg-green-600 text-base font-semibold text-white hover:bg-green-700">
+                <RotateCcw className="size-5" /> Retry Camera
               </Button>
-              <Button onClick={() => fileInputRef.current?.click()} className="bg-green-600 text-white hover:bg-green-700">
-                <Upload className="size-4" /> Upload Selfie
+              <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="h-14 w-full border-2 text-base font-semibold">
+                <Upload className="size-5" /> Upload Selfie
               </Button>
             </div>
             <input ref={fileInputRef} type="file" accept="image/*" capture="user" className="hidden" onChange={handleFileUpload} />
           </div>
         )}
       </div>
-      {phase === "idle" && cameraReady && (
-        <Button onClick={startRecording} className="w-full bg-green-600 text-white hover:bg-green-700">
-          <ScanFace className="size-4" /> Start Liveness Check
+
+      {/* Retake button after capture */}
+      {phase === "done" && (
+        <Button variant="outline" onClick={startCamera} className="h-12 w-full text-base font-semibold">
+          <RotateCcw className="size-5" /> Retake Selfie
         </Button>
       )}
-      {phase === "recording" && <p className="text-center text-xs text-muted-foreground">Follow the prompts. Keep your face centered.</p>}
-      {phase === "done" && <Button variant="outline" onClick={() => setPhase("idle")} className="w-full">Retake</Button>}
     </div>
   );
 }
@@ -622,6 +706,8 @@ export default function KycPage({ onBack }) {
   const [faceMatchAttempts, setFaceMatchAttempts] = useState(0);
   const [manualReview, setManualReview] = useState(false);
   const [showTestControls, setShowTestControls] = useState(false);
+  const [showWhyInfo, setShowWhyInfo] = useState(false);
+  const [verifiedFlash, setVerifiedFlash] = useState(false);
   const [testMode, setTestMode] = useState(null);
   const [preChecks, setPreChecks] = useState({ blacklist: null, rateLimit: null, loading: false });
   const ninRef = useRef("");
@@ -701,7 +787,8 @@ export default function KycPage({ onBack }) {
     setVerificationLevel(null);
   }
 
-  async function runFaceMatch() {
+  async function runFaceMatch(capturedData) {
+    const selfie = capturedData || selfieData;
     setFaceMatchLoading(true);
     setError("");
     if (!ninFacePhoto || !ninFacePhoto.file) {
@@ -709,23 +796,29 @@ export default function KycPage({ onBack }) {
       setFaceMatchLoading(false);
       return;
     }
-    if (!selfieData || !selfieData.file) {
+    if (!selfie || !selfie.file) {
       setError("Missing selfie. Please retake.");
       setFaceMatchLoading(false);
       return;
     }
     console.log("[FaceMatch] nin_face_photo:", { file: ninFacePhoto.file, url: ninFacePhoto.url, size: ninFacePhoto.file.size, type: ninFacePhoto.file.type });
-    console.log("[FaceMatch] liveness_selfie:", { file: selfieData.file, url: selfieData.url, size: selfieData.file.size, type: selfieData.file.type });
+    console.log("[FaceMatch] liveness_selfie:", { file: selfie.file, url: selfie.url, size: selfie.file.size, type: selfie.file.type });
     try {
       if (testMode === "fail") { setFaceMatchScore(0.3); setFaceMatchAttempts((p) => p + 1); setFaceMatchLoading(false); return; }
-      if (testMode === "pass") { setFaceMatchScore(0.85); setFaceMatchLoading(false); return; }
+      if (testMode === "pass") {
+        setFaceMatchScore(0.85);
+        setFaceMatchLoading(false);
+        setVerifiedFlash(true);
+        setTimeout(() => { setVerifiedFlash(false); setStep(4); }, 1000);
+        return;
+      }
       await ensureModels();
       const idImg = new Image();
       idImg.src = ninFacePhoto.url;
       await new Promise((res, rej) => { idImg.onload = res; idImg.onerror = rej; });
       console.log("[FaceMatch] NIN face image loaded:", idImg.naturalWidth, "x", idImg.naturalHeight);
       const selfieImg = new Image();
-      selfieImg.src = selfieData.url;
+      selfieImg.src = selfie.url;
       await new Promise((res, rej) => { selfieImg.onload = res; selfieImg.onerror = rej; });
       console.log("[FaceMatch] Selfie image loaded:", selfieImg.naturalWidth, "x", selfieImg.naturalHeight);
       const result = await matchFaces(idImg, selfieImg);
@@ -736,7 +829,12 @@ export default function KycPage({ onBack }) {
         setFaceMatchAttempts((p) => p + 1);
       } else {
         setFaceMatchScore(result.score);
-        if (result.score < 0.7) setFaceMatchAttempts((p) => p + 1);
+        if (result.score < 0.7) {
+          setFaceMatchAttempts((p) => p + 1);
+        } else {
+          setVerifiedFlash(true);
+          setTimeout(() => { setVerifiedFlash(false); setStep(4); }, 1000);
+        }
         if (result.reason) setError(result.reason);
       }
     } catch (err) {
@@ -1122,90 +1220,135 @@ export default function KycPage({ onBack }) {
       )}
 
       {/* Step 3: Liveness + Face Match */}
-      {step === 3 && (
-        <div className="space-y-6">
-          <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5 text-center">
-            <p className="text-sm font-semibold text-primary">Step 3 of 4: Identity Verification</p>
+      {step === 3 && !manualReview && (
+        <div className="space-y-5">
+          {/* Progress bar */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <p className="text-base font-bold text-primary">Step 3 of 4: Identity Verification</p>
+              <button onClick={() => setShowWhyInfo(!showWhyInfo)} className="text-sm font-medium text-muted-foreground underline hover:text-foreground">
+                Why we need this
+              </button>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+              <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: "75%" }} />
+            </div>
           </div>
+
+          {showWhyInfo && (
+            <div className="rounded-lg border border-border bg-muted/50 p-4 text-sm text-muted-foreground">
+              We compare your selfie to the photo on your NIN slip to confirm you are the real owner of the ID. This prevents identity theft and keeps Directnest safe for everyone. Your photos are never shared and are deleted after verification.
+            </div>
+          )}
+
           <section className="space-y-4 rounded-xl border border-border bg-card p-5">
-            <h2 className="flex items-center gap-2 text-base font-semibold"><ScanFace className="size-4 text-primary" /> Liveness + Face Match</h2>
-            <p className="text-sm text-muted-foreground">We'll capture a quick selfie following the prompts: <span className="font-medium text-foreground">Blink, Turn Left, Smile</span>. Your selfie will be compared to the cropped face from your NIN slip.</p>
+            <h2 className="flex items-center gap-2 text-lg font-bold"><ScanFace className="size-5 text-primary" /> Selfie Check</h2>
+
             {!selfieData ? (
-              <>
-                <div className="rounded-xl border border-green-200 bg-white p-5 shadow-sm">
-                  <div className="mb-3 text-center text-3xl">📸</div>
-                  <h3 className="mb-3 text-center text-base font-bold text-foreground">Complete Your Liveness Check</h3>
-                  <ul className="mx-auto mb-3 max-w-xs space-y-2 text-sm text-muted-foreground">
-                    <li className="flex items-start gap-2"><span className="mt-0.5 size-1.5 shrink-0 rounded-full bg-green-500" /> Use a well-lit room</li>
-                    <li className="flex items-start gap-2"><span className="mt-0.5 size-1.5 shrink-0 rounded-full bg-green-500" /> Face the camera directly</li>
-                    <li className="flex items-start gap-2"><span className="mt-0.5 size-1.5 shrink-0 rounded-full bg-green-500" /> Remove glasses and hat</li>
-                  </ul>
-                  <p className="text-center text-xs text-muted-foreground">Takes about 1 minute</p>
-                </div>
-                <LivenessCamera onComplete={(data) => setSelfieData(data)} />
-              </>
+              <LivenessCamera onComplete={async (data) => {
+                setSelfieData(data);
+                setFaceMatchScore(null);
+                setFaceMatchAttempts(0);
+                setError("");
+                await runFaceMatch(data);
+              }} />
             ) : (
-              <div className="space-y-3">
-                <div className="flex items-center gap-3 rounded-lg border border-green-200 bg-green-50 p-4">
-                  <CheckCircle2 className="size-5 text-green-600" />
-                  <div><p className="text-sm font-semibold text-green-700">Selfie captured</p><p className="text-xs text-green-600">Ready for face match</p></div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <img src={ninFacePhoto.url} alt="NIN face" className="size-20 rounded-md border border-border object-cover" />
-                  <div className="flex items-center text-muted-foreground">→</div>
-                  <img src={selfieData.url} alt="Selfie" className="size-20 rounded-md border border-border object-cover" />
-                </div>
-                <Button variant="outline" onClick={() => { setSelfieData(null); setFaceMatchScore(null); }} className="w-full">Retake Selfie</Button>
+              <div className="space-y-4">
+                {/* Verified flash */}
+                {verifiedFlash ? (
+                  <div className="flex flex-col items-center gap-3 py-8">
+                    <div className="flex size-20 items-center justify-center rounded-full bg-green-100">
+                      <CheckCircle2 className="size-12 text-green-600" />
+                    </div>
+                    <p className="text-2xl font-bold text-green-600">Verified!</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Face match loading */}
+                    {faceMatchLoading && (
+                      <div className="flex flex-col items-center gap-3 py-6">
+                        <Loader2 className="size-10 animate-spin text-primary" />
+                        <p className="text-base font-semibold text-muted-foreground">Comparing faces…</p>
+                      </div>
+                    )}
+
+                    {/* Face match result */}
+                    {faceMatchScore !== null && !faceMatchLoading && (
+                      <div className={cn("flex items-center gap-3 rounded-lg border p-4", faceMatchScore >= 0.7 ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50")}>
+                        {faceMatchScore >= 0.7 ? <CheckCircle2 className="size-6 text-green-600" /> : <AlertCircle className="size-6 text-red-600" />}
+                        <div>
+                          <p className={cn("text-base font-bold", faceMatchScore >= 0.7 ? "text-green-700" : "text-red-700")}>
+                            {faceMatchScore >= 0.7 ? "Face Match Passed" : "Faces don't match"}
+                          </p>
+                          <p className="text-sm text-muted-foreground">Score: {(faceMatchScore * 100).toFixed(1)}%</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 1st fail message */}
+                    {faceMatchAttempts === 1 && faceMatchScore !== null && faceMatchScore < 0.7 && !faceMatchLoading && (
+                      <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                        <AlertCircle className="mt-0.5 size-5 shrink-0 text-amber-600" />
+                        <p className="text-base font-medium text-amber-700">Try again. Move to a brighter area.</p>
+                      </div>
+                    )}
+
+                    {/* 2nd fail: tips + skip button */}
+                    {faceMatchAttempts >= 2 && faceMatchScore !== null && faceMatchScore < 0.7 && !faceMatchLoading && (
+                      <div className="space-y-3">
+                        <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                          <AlertCircle className="mt-0.5 size-5 shrink-0 text-amber-600" />
+                          <div>
+                            <p className="text-base font-bold text-amber-700">Having trouble matching your face?</p>
+                            <ul className="mt-1.5 space-y-1 text-sm text-amber-600">
+                              <li>Ensure good lighting on your face</li>
+                              <li>Remove glasses, hats, or face coverings</li>
+                              <li>Face the camera directly and hold still</li>
+                            </ul>
+                          </div>
+                        </div>
+                        <Button onClick={skipToManualReview} disabled={submitting} variant="outline" className="h-14 w-full border-2 border-amber-300 text-base font-bold text-amber-700 hover:bg-amber-50">
+                          {submitting ? <><Loader2 className="size-5 animate-spin" /> Submitting…</> : <><PencilLine className="size-5" /> Skip and submit for manual review</>}
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Preview + retake */}
+                    {!faceMatchLoading && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-center gap-3">
+                          <img src={ninFacePhoto.url} alt="NIN face" className="size-20 rounded-lg border border-border object-cover" />
+                          <ArrowRight className="size-5 text-muted-foreground" />
+                          <img src={selfieData.url} alt="Selfie" className="size-20 rounded-lg border border-border object-cover" />
+                        </div>
+                        <Button variant="outline" onClick={() => { setSelfieData(null); setFaceMatchScore(null); setFaceMatchAttempts(0); }} className="h-12 w-full text-base font-semibold">
+                          <RotateCcw className="size-5" /> Retake Selfie
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
           </section>
 
-          {selfieData && faceMatchScore === null && !faceMatchLoading && (
-            <Button onClick={runFaceMatch} className="w-full bg-green-600 text-white hover:bg-green-700"><ScanFace className="size-4" /> Run Face Match</Button>
-          )}
-          {faceMatchLoading && (
-            <div className="flex items-center justify-center gap-2 py-3 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Comparing faces…</div>
-          )}
-          {faceMatchScore !== null && !faceMatchLoading && (
-            <div className={cn("flex items-center gap-3 rounded-lg border p-4", faceMatchScore >= 0.7 ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50")}>
-              {faceMatchScore >= 0.7 ? <CheckCircle2 className="size-5 text-green-600" /> : <AlertCircle className="size-5 text-red-600" />}
-              <div>
-                <p className={cn("text-sm font-semibold", faceMatchScore >= 0.7 ? "text-green-700" : "text-red-700")}>Face Match Score: {(faceMatchScore * 100).toFixed(1)}%{faceMatchScore >= 0.7 ? " — Pass" : " — Below threshold (70%)"}</p>
-                <p className="text-xs text-muted-foreground">Threshold: 70% (0.7)</p>
-              </div>
-            </div>
-          )}
-          {faceMatchAttempts >= 2 && faceMatchScore !== null && faceMatchScore < 0.7 && !faceMatchLoading && (
-            <div className="space-y-3">
-              <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
-                <AlertCircle className="mt-0.5 size-5 shrink-0 text-amber-600" />
-                <div>
-                  <p className="text-sm font-semibold text-amber-700">Having trouble?</p>
-                  <p className="mt-0.5 text-xs text-amber-600">Ensure good lighting, remove glasses/hat, and face the camera directly.</p>
-                </div>
-              </div>
-              <Button onClick={skipToManualReview} disabled={submitting} variant="outline" className="w-full border-amber-300 text-amber-700 hover:bg-amber-50">
-                {submitting ? <><Loader2 className="size-4 animate-spin" /> Submitting…</> : <><PencilLine className="size-4" /> Skip and submit for manual review</>}
-              </Button>
-            </div>
-          )}
+          {error && <p className="flex items-center gap-1.5 text-base font-medium text-red-600"><AlertCircle className="size-5" /> {error}</p>}
 
+          {/* Test controls */}
           <div className="rounded-lg border border-dashed border-border p-3">
-            <button onClick={() => setShowTestControls(!showTestControls)} className="text-xs font-medium text-muted-foreground hover:text-foreground">{showTestControls ? "Hide" : "Show"} Test Controls</button>
+            <button onClick={() => setShowTestControls(!showTestControls)} className="text-sm font-medium text-muted-foreground hover:text-foreground">{showTestControls ? "Hide" : "Show"} Test Controls</button>
             {showTestControls && (
               <div className="mt-3 flex flex-wrap gap-2">
-                <Button variant="outline" onClick={() => { setTestMode("pass"); setFaceMatchScore(0.85); }} className="text-xs">Simulate Pass (85%)</Button>
-                <Button variant="outline" onClick={() => { setTestMode("fail"); setFaceMatchScore(0.3); }} className="text-xs">Simulate Fail (30%)</Button>
+                <Button variant="outline" onClick={() => { setTestMode("pass"); setFaceMatchScore(0.85); setVerifiedFlash(true); setTimeout(() => { setVerifiedFlash(false); setStep(4); }, 1000); }} className="text-xs">Simulate Pass (85%)</Button>
+                <Button variant="outline" onClick={() => { setTestMode("fail"); setFaceMatchScore(0.3); setFaceMatchAttempts((p) => p + 1); }} className="text-xs">Simulate Fail (30%)</Button>
                 <p className="w-full text-xs text-muted-foreground">Test NIN: 12345678901, Name: TEST USER</p>
               </div>
             )}
           </div>
 
-          {error && <p className="flex items-center gap-1.5 text-sm font-medium text-red-600"><AlertCircle className="size-4" /> {error}</p>}
-
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setStep(2)} className="flex-1 sm:flex-none"><ArrowLeftIcon className="size-4" /> Back</Button>
-            <Button onClick={() => { setError(""); if (!selfieData) { setError("Please capture a selfie."); return; } if (faceMatchScore === null) { setError("Please run the face match."); return; } if (faceMatchScore < 0.7) { setError("Faces don't match. Please retake NIN photo and Selfie."); return; } setStep(4); }} disabled={!selfieData || faceMatchScore === null || faceMatchScore < 0.7} className="flex-1 bg-green-600 text-white hover:bg-green-700">Continue <ArrowRight className="size-4" /></Button>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => setStep(2)} className="h-14 flex-1 text-base font-semibold sm:flex-none"><ArrowLeftIcon className="size-5" /> Back</Button>
+            <Button onClick={() => { setError(""); if (!selfieData) { setError("Please capture a selfie."); return; } if (faceMatchScore === null) { setError("Please wait for face match."); return; } if (faceMatchScore < 0.7) { setError("Faces don't match. Please retake your selfie."); return; } setStep(4); }} disabled={!selfieData || faceMatchScore === null || faceMatchScore < 0.7} className="h-14 flex-1 bg-green-600 text-base font-bold text-white hover:bg-green-700">Continue <ArrowRight className="size-5" /></Button>
           </div>
         </div>
       )}
